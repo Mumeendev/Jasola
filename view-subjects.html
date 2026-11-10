@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Subjects - Jasola Model School</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            padding: 2rem;
+            background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+                        url('https://images.unsplash.com/photo-1434031211128-0c29b692f139?w=1920&q=80') no-repeat center center/cover;
+        }
+
+        .view-container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .view-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .view-header h1 {
+            color: #1a202c;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+        }
+
+        table th, table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        table th {
+            background: #2c5282;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        table tr:hover {
+            background: #f7fafc;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 2rem;
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .bottom-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .bottom-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+
+        .bottom-btn.go-back {
+            background: #718096;
+            color: #fff;
+        }
+
+        .bottom-btn.add-more {
+            background: #2c5282;
+            color: #fff;
+        }
+
+        .bottom-btn.refresh {
+            background: #38a169;
+            color: #fff;
+        }
+
+        /* Navigation */
+        nav {
+            background: #fff;
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c5282;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">Jasola Model School</div>
+    </nav>
+
+    <div class="view-container">
+        <div class="view-header">
+            <h1>All Subjects</h1>
+            <p>List of all subjects registered in the database</p>
+        </div>
+        
+        <div id="subjects-table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Subject Name</th>
+                        <th>Category/Class</th>
+                    </tr>
+                </thead>
+                <tbody id="subjects-list">
+                    <!-- Data will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bottom-buttons">
+            <a href="dashboard.html" class="bottom-btn go-back">Dashboard</a>
+            <a href="add-subject.html" class="bottom-btn add-more">Add Subject</a>
+            <button class="bottom-btn refresh" onclick="loadSubjects()">Refresh List</button>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        async function loadSubjects() {
+            const list = document.getElementById('subjects-list');
+            const container = document.getElementById('subjects-table-container');
+            const baseUrl = window.location.protocol === 'file:' ? 'http://127.0.0.1:3000' : window.location.origin;
+
+            try {
+                const response = await fetch(`${baseUrl}/api/subjects`);
+                const subjects = await response.json();
+
+                if (subjects.length === 0) {
+                    container.innerHTML = '<p class="no-data">No subjects found. Use the "Add Subject" page to create one.</p>';
+                    return;
+                }
+
+                list.innerHTML = subjects.map((s, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${s.name}</td>
+                        <td>${s.class_name}</td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = '<p class="no-data">Error loading subjects. Is the server running?</p>';
+            }
+        }
+
+        loadSubjects();
+    </script>
+</body>
+</html>

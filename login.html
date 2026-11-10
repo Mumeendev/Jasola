@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Jasola Model School</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+                        url('https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=1920&q=80') no-repeat center center/cover;
+        }
+
+        .login-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 3rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-header h1 {
+            color: #1a202c;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header p {
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            color: #1a202c;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #2c5282;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #2c5282;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .login-btn:hover {
+            background: #1a365d;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+
+        .back-link a {
+            color: #2c5282;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 0.75rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+
+        /* Navigation */
+        nav {
+            background: #fff;
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c5282;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: #2c5282;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">Jasola Model School</div>
+        <ul class="nav-links">
+            <li><a href="#download">School code</a></li>
+        </ul>
+    </nav>
+
+    <div class="login-container">
+        <div class="login-header">
+            <h1>Login</h1>
+            <p>Enter your credentials to access the portal</p>
+        </div>
+        <div class="error-message" id="error-message">Invalid username or password</div>
+        <form id="login-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Enter your username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Enter your password" required>
+            </div>
+            <button type="submit" class="login-btn">Login</button>
+        </form>
+        <div class="back-link">
+            <a href="index.html">Back to Home</a>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        async function resolveBaseUrl() {
+            return window.resolvePortalApiBase();
+        }
+
+        async function ensureHostedLogin() {
+            const errorMessage = document.getElementById('error-message');
+            
+            if (window.location.protocol === 'file:') {
+                try {
+                    const baseUrl = await resolveBaseUrl();
+                    // Successfully found server, redirect to the hosted version
+                    window.location.replace(`${baseUrl}/login.html`);
+                } catch (err) {
+                    errorMessage.innerHTML = '<strong>Server Not Started!</strong><br>Please start the portal server (npm start) and then refresh this page.<br>Or use: <a href="http://localhost:3000/login.html">http://localhost:3000/login.html</a>';
+                    errorMessage.style.background = '#fff5f5';
+                    errorMessage.style.border = '1px solid #fc8181';
+                    errorMessage.style.display = 'block';
+                }
+            } else {
+                // We are on a hosted version, check database health
+                try {
+                    const response = await fetch(`${window.location.origin}/api/health`);
+                    const health = await response.json();
+                    if (health.database !== 'connected') {
+                        errorMessage.innerHTML = '<strong>Database Connection Error!</strong><br>The server is running but cannot connect to the database. Please check your internet connection or database configuration.';
+                        errorMessage.style.display = 'block';
+                    }
+                } catch (err) {
+                    console.error('Health check failed:', err);
+                }
+            }
+        }
+
+        ensureHostedLogin();
+
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('error-message');
+            const submitBtn = this.querySelector('button');
+            
+            errorMessage.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Logging in...';
+
+            async function performLogin(retries = 2) {
+                try {
+                    const baseUrl = await resolveBaseUrl();
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+                    const response = await fetch(`${baseUrl}/api/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password }),
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        sessionStorage.setItem('isLoggedIn', 'true');
+                        sessionStorage.setItem('username', data.user.username);
+                        sessionStorage.setItem('role', data.user.role);
+                        sessionStorage.setItem('token', data.token);
+                        if (data.user.role === 'teacher') {
+                            window.location.href = 'teacher-dashboard.html';
+                        } else if (data.user.role === 'admin') {
+                            window.location.href = 'dashboard.html';
+                        } else {
+                            sessionStorage.clear();
+                            errorMessage.textContent = 'This account does not have portal access.';
+                            errorMessage.style.display = 'block';
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Login';
+                        }
+                    } else {
+                        errorMessage.textContent = data.message || 'Invalid username or password';
+                        errorMessage.style.display = 'block';
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Login';
+                    }
+                } catch (err) {
+                    console.error('Login attempt failed:', err);
+                    if (retries > 0) {
+                        console.log(`Retrying login... (${retries} left)`);
+                        setTimeout(() => performLogin(retries - 1), 1000);
+                    } else {
+                        if (window.location.protocol === 'file:') {
+                            errorMessage.innerHTML = '<strong>Connection Error!</strong><br>Cannot reach the server. Make sure you have started it with "npm start".';
+                        } else {
+                            errorMessage.innerHTML = '<strong>Server Error!</strong><br>Lost connection to the portal server. Please ensure the server is still running.';
+                        }
+                        errorMessage.style.display = 'block';
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Login';
+                    }
+                }
+            }
+
+            performLogin();
+        });
+    </script>
+</body>
+</html>

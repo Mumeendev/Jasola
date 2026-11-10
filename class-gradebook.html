@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Gradebook - Jasola Model School</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:1.5rem; background:#edf2f7; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { max-width:1500px; margin:0 auto; padding:1.5rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000012; }
+        header,.toolbar,.filters { display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
+        h1 { margin:.25rem 0; color:#1a365d; }
+        .filters { justify-content:flex-start; margin:1rem 0; padding:1rem; background:#f7fafc; border-radius:6px; }
+        label { display:grid; gap:.3rem; font-weight:600; }
+        select,input { min-width:150px; padding:.65rem; border:1px solid #a0aec0; border-radius:4px; font:inherit; }
+        button,.button { padding:.7rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; font:inherit; }
+        button:disabled { opacity:.6; cursor:wait; }
+        #status { color:#4a5568; min-height:1.5rem; }
+        #summary { color:#2d3748; font-weight:600; }
+        #subject-progress { color:#4a5568; font-size:.92rem; }
+        .table-wrap { overflow:auto; border:1px solid #cbd5e0; }
+        table { width:100%; min-width:1050px; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+        th,td { padding:.5rem; border:1px solid #cbd5e0; text-align:center; white-space:nowrap; }
+        thead th { position:sticky; top:0; z-index:1; background:#1f4e78; color:#fff; }
+        thead tr:nth-child(2) th { top:38px; background:#2c5282; }
+        tbody tr:nth-child(even) { background:#f7fafc; }
+        tbody tr:hover { background:#ebf8ff; }
+        td.name,th.name { text-align:left; }
+        .grand-total,.overall-grade { font-weight:700; }
+        tfoot { background:#e2e8f0; font-weight:700; }
+        .helper { color:#4a5568; font-size:.92rem; }
+        @page { size:A3 landscape; margin:10mm; }
+        @media print {
+            body { padding:0; background:#fff; font-size:9pt; }
+            main { max-width:none; padding:0; box-shadow:none; }
+            .toolbar,.filters,#status,#subject-progress,.helper { display:none !important; }
+            .table-wrap { overflow:visible; border:0; }
+            table { min-width:0; font-size:8pt; }
+            th,td { padding:3px; white-space:normal; }
+            thead th { position:static; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header class="toolbar">
+            <div>
+                <h1>CLASS GRADEBOOK</h1>
+                <p id="gradebook-details">Choose a class, term, and session to collate results.</p>
+            </div>
+            <div class="toolbar">
+                <a class="button" id="back-link" href="dashboard.html">Back</a>
+                <button type="button" id="print-button" onclick="window.print()" disabled>Print spreadsheet</button>
+            </div>
+        </header>
+        <form class="filters" id="gradebook-form">
+            <label>Class and section
+                <select id="class" required><option value="">Loading classes…</option></select>
+            </label>
+            <label>Term
+                <select id="term" required>
+                    <option value="">Select term</option>
+                    <option>First Term</option>
+                    <option>Second Term</option>
+                    <option>Third Term</option>
+                </select>
+            </label>
+            <label>Academic session
+                <input id="session" type="text" inputmode="numeric" pattern="[0-9]{4}/[0-9]{4}"
+                       placeholder="e.g. 2025/2026" title="Enter the session as YYYY/YYYY" required>
+            </label>
+            <button type="submit" id="load-button">Load class results</button>
+        </form>
+        <p id="status" role="status">Results collate automatically from the saved scores for each allocated subject.</p>
+        <p id="summary"></p>
+        <p id="subject-progress"></p>
+        <p class="helper">Each subject shows the learner's total out of 100, percentage, and grade. Overall totals and rank use subjects with saved scores only; the completed-subject count shows what is still outstanding.</p>
+        <div class="table-wrap">
+            <table>
+                <thead id="gradebook-head"></thead>
+                <tbody id="gradebook-body"></tbody>
+                <tfoot id="gradebook-foot"></tfoot>
+            </table>
+        </div>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        const role = sessionStorage.getItem('role');
+        if (role === 'teacher') {
+            document.getElementById('back-link').href = 'teacher-dashboard.html';
+            document.getElementById('back-link').textContent = 'Teacher page';
+        }
+
+        const classSelect = document.getElementById('class');
+        const status = document.getElementById('status');
+        const head = document.getElementById('gradebook-head');
+        const body = document.getElementById('gradebook-body');
+        const foot = document.getElementById('gradebook-foot');
+        const printButton = document.getElementById('print-button');
+
+        function gradeFor(percent) {
+            if (percent >= 70) return 'A';
+            if (percent >= 60) return 'B';
+            if (percent >= 50) return 'C';
+            if (percent >= 45) return 'D';
+            if (percent >= 40) return 'E';
+            return 'F';
+        }
+
+        function addCell(row, value, options = {}) {
+            const cell = document.createElement(options.header ? 'th' : 'td');
+            cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
+            if (options.colSpan) cell.colSpan = options.colSpan;
+            if (options.rowSpan) cell.rowSpan = options.rowSpan;
+            if (options.className) cell.className = options.className;
+            row.appendChild(cell);
+            return cell;
+        }
+
+        async function loadClasses() {
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/classes`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load classes.');
+                classSelect.replaceChildren(new Option('Select class and section', ''));
+                classes.forEach(item => {
+                    const stream = item.stream ? ` - ${item.stream}` : '';
+                    classSelect.add(new Option(`${item.class_name} - ${item.section}${stream}`, item.id));
+                });
+                if (!classes.length) {
+                    classSelect.replaceChildren(new Option('No allocated classes', ''));
+                    status.textContent = 'No classes are available for this account.';
+                }
+            } catch (error) {
+                classSelect.replaceChildren(new Option('Unable to load classes', ''));
+                status.textContent = error.message || 'Unable to load classes.';
+            }
+        }
+
+        function clearGradebook() {
+            head.replaceChildren();
+            body.replaceChildren();
+            foot.replaceChildren();
+            document.getElementById('summary').textContent = '';
+            printButton.disabled = true;
+        }
+
+        function renderGradebook(data, term, sessionYear) {
+            clearGradebook();
+            const subjects = data.subjects;
+            const scoreMap = new Map(data.scores.map(score =>
+                [`${score.learner_id}:${score.subject_id}`, score]
+            ));
+            const summaries = data.learners.map(learner => {
+                const subjectScores = subjects.map(subject => {
+                    const score = scoreMap.get(`${learner.id}:${subject.id}`);
+                    return score ? Number(score.ca1) + Number(score.ca2) + Number(score.exam) : null;
+                });
+                const completed = subjectScores.filter(score => score !== null);
+                const total = completed.reduce((sum, score) => sum + score, 0);
+                const percentage = completed.length ? total / completed.length : null;
+                return { learner, subjectScores, completed: completed.length, total, percentage };
+            });
+            const ranked = summaries.filter(item => item.percentage !== null)
+                .sort((left, right) => right.percentage - left.percentage);
+
+            const groupHeader = document.createElement('tr');
+            [
+                ['No.', 2, ''],
+                ['Learner name', 2, 'name'],
+                ['Admission number', 2, '']
+            ].forEach(([label, rowSpan, className]) =>
+                addCell(groupHeader, label, { header: true, rowSpan, className })
+            );
+            subjects.forEach(subject => {
+                const title = subject.stream ? `${subject.name} (${subject.stream})` : subject.name;
+                addCell(groupHeader, title, { header: true, colSpan: 3 });
+            });
+            [
+                ['Aggregate', 2],
+                ['Percent', 2],
+                ['Grade', 2],
+                ['Subjects<br>done', 2],
+                ['Position', 2]
+            ].forEach(([label, rowSpan]) => addCell(groupHeader, label.replace('<br>', ' '), { header: true, rowSpan }));
+            const detailHeader = document.createElement('tr');
+            subjects.forEach(() => {
+                ['Total /100', 'Percent', 'Grade'].forEach(label =>
+                    addCell(detailHeader, label, { header: true })
+                );
+            });
+            head.append(groupHeader, detailHeader);
+
+            summaries.forEach((summary, index) => {
+                const row = document.createElement('tr');
+                addCell(row, index + 1);
+                addCell(row, `${summary.learner.surname} ${summary.learner.othername}`, { className: 'name' });
+                addCell(row, summary.learner.admission_number || '—');
+                summary.subjectScores.forEach(score => {
+                    addCell(row, score === null ? '—' : score.toFixed(2));
+                    addCell(row, score === null ? '—' : `${score.toFixed(2)}%`);
+                    addCell(row, score === null ? '—' : gradeFor(score));
+                });
+                const rank = summary.percentage === null
+                    ? '—'
+                    : `${ranked.findIndex(item => item.percentage === summary.percentage) + 1} of ${ranked.length}`;
+                addCell(row, summary.completed ? `${summary.total.toFixed(2)} / ${summary.completed * 100}` : '—', { className: 'grand-total' });
+                addCell(row, summary.percentage === null ? '—' : `${summary.percentage.toFixed(2)}%`);
+                addCell(row, summary.percentage === null ? '—' : gradeFor(summary.percentage), { className: 'overall-grade' });
+                addCell(row, `${summary.completed} / ${subjects.length}`);
+                addCell(row, rank);
+                body.appendChild(row);
+            });
+
+            const averageRow = document.createElement('tr');
+            addCell(averageRow, 'Class average', { colSpan: 3 });
+            subjects.forEach((subject, subjectIndex) => {
+                const values = summaries.map(item => item.subjectScores[subjectIndex]).filter(score => score !== null);
+                const average = values.length
+                    ? values.reduce((sum, score) => sum + score, 0) / values.length
+                    : null;
+                addCell(averageRow, average === null ? '—' : average.toFixed(2));
+                addCell(averageRow, average === null ? '—' : `${average.toFixed(2)}%`);
+                addCell(averageRow, average === null ? '—' : gradeFor(average));
+            });
+            const classPercentages = summaries.map(item => item.percentage).filter(value => value !== null);
+            const classAverage = classPercentages.length
+                ? classPercentages.reduce((sum, value) => sum + value, 0) / classPercentages.length
+                : null;
+            addCell(averageRow, '—');
+            addCell(averageRow, classAverage === null ? '—' : `${classAverage.toFixed(2)}%`);
+            addCell(averageRow, classAverage === null ? '—' : gradeFor(classAverage));
+            addCell(averageRow, '—');
+            addCell(averageRow, '—');
+            foot.appendChild(averageRow);
+
+            const classLabel = `${data.class.class_name} - ${data.class.section}` +
+                (data.class.stream ? ` (${data.class.stream})` : '');
+            document.getElementById('gradebook-details').textContent =
+                `${classLabel} | ${term.toUpperCase()} | SESSION: ${sessionYear}`;
+            document.getElementById('summary').textContent =
+                `${data.learners.length} learner(s) • ${subjects.length} allocated subject(s) • ` +
+                `${ranked.length} learner(s) with results`;
+            document.getElementById('subject-progress').textContent = subjects.length
+                ? `Subject uploads (learners with saved scores): ${subjects.map(subject => {
+                    const submitted = data.learners.filter(learner =>
+                        scoreMap.has(`${learner.id}:${subject.id}`)
+                    ).length;
+                    return `${subject.name}: ${submitted}/${data.learners.length}`;
+                }).join(' | ')}`
+                : '';
+            status.textContent = !subjects.length
+                ? 'No subjects are allocated to this class yet.'
+                : !data.learners.length
+                    ? 'No learners are registered in this class.'
+                    : 'Collated from the latest saved scores. Refresh by loading the class again after new scores are submitted.';
+            printButton.disabled = data.learners.length === 0 || subjects.length === 0;
+        }
+
+        document.getElementById('gradebook-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            clearGradebook();
+            const loadButton = document.getElementById('load-button');
+            const classId = Number(classSelect.value);
+            const term = document.getElementById('term').value;
+            const sessionYear = document.getElementById('session').value.trim();
+            if (!classId || !event.target.reportValidity()) return;
+            loadButton.disabled = true;
+            status.textContent = 'Loading and collating class scores…';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const query = new URLSearchParams({ classId: String(classId), term, sessionYear });
+                const response = await fetch(`${baseUrl}/api/class-gradebook?${query}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load the class gradebook.');
+                renderGradebook(data, term, sessionYear);
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load the class gradebook.';
+            } finally {
+                loadButton.disabled = false;
+            }
+        });
+
+        loadClasses();
+    </script>
+</body>
+</html>

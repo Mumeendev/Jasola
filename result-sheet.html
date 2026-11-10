@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Gradebook - Jasola Model School</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:2rem; background:#edf2f7; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { max-width:1280px; margin:1rem auto; padding:2rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000012; }
+        .school-heading { text-align:center; border-bottom:2px solid #2c5282; margin-bottom:1.25rem; padding-bottom:.8rem; }
+        .school-heading h1 { margin:.25rem; color:#1a365d; letter-spacing:.04em; }
+        .school-heading p { margin:.2rem; color:#4a5568; }
+        header { display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+        #sheet-details { font-weight:600; color:#2d3748; }
+        .table-wrap { overflow:auto; border:1px solid #a0aec0; }
+        table { width:100%; min-width:920px; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+        th,td { padding:.55rem .65rem; border:1px solid #cbd5e0; text-align:center; }
+        th { position:sticky; top:0; z-index:1; background:#1f4e78; color:#fff; }
+        th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { text-align:left; }
+        tbody tr:nth-child(even) { background:#f7fafc; }
+        tbody tr:focus-within { background:#ebf8ff; }
+        td input { width:82px; padding:.5rem; border:1px solid #a0aec0; border-radius:4px; text-align:center; font:inherit; }
+        td input:focus { outline:2px solid #3182ce; border-color:#3182ce; }
+        .total,.grade { font-weight:700; }
+        tfoot { font-weight:700; background:#e2e8f0; }
+        button,.button { display:inline-block; padding:.75rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; }
+        button.secondary { background:#4a5568; }
+        button:disabled { opacity:.6; cursor:wait; }
+        #status { color:#4a5568; }
+        .actions { display:flex; gap:.6rem; }
+        .helper { color:#4a5568; font-size:.92rem; }
+        .learner-picker { display:flex; align-items:center; gap:.75rem; margin:.75rem 0; }
+        .learner-picker label { font-weight:600; }
+        .learner-picker select { min-width:260px; padding:.6rem; border:1px solid #a0aec0; border-radius:4px; font:inherit; }
+        @page { size:A4 landscape; margin:10mm; }
+        @media print {
+            body { background:#fff; padding:0; font-size:10pt; }
+            main { max-width:none; margin:0; padding:0; border-radius:0; box-shadow:none; }
+            .actions, #status, .helper, .learner-picker { display:none !important; }
+            .table-wrap { overflow:visible; border:0; }
+            table { min-width:0; font-size:9pt; }
+            th,td { padding:4px; }
+            th { position:static; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+            td input { width:55px; border:0; padding:0; background:transparent; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <h1>CLASS SCORE SHEET</h1>
+                <p id="sheet-details">Loading class and subject…</p>
+            </div>
+            <div class="actions">
+                <a class="button" id="back-link" href="upload-result.html">Back</a>
+                <button type="button" class="secondary" onclick="window.print()">Print Gradebook</button>
+            </div>
+        </header>
+        <div class="school-heading">
+            <h1>JASOLA MODEL SCHOOL</h1>
+            <p>Continuous Assessment and Examination Register</p>
+        </div>
+        <p class="helper">This sheet contains only the selected class and allocated subject. Select one learner to enter or edit only that learner's scores, or leave All learners selected to work through the full class. Use Tab to move across. CA1 is out of 20, CA2 is out of 20, and the exam is out of 60.</p>
+        <p id="status" role="status">Loading learners…</p>
+        <div class="learner-picker">
+            <label for="learner-filter">Learner</label>
+            <select id="learner-filter" disabled>
+                <option value="">All learners in this class</option>
+            </select>
+        </div>
+        <form id="score-form">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr><th rowspan="2">No.</th><th rowspan="2">Learner name</th><th rowspan="2">Admission number</th><th>CA1</th><th>CA2</th><th>Exam</th><th rowspan="2">Total<br>/100</th><th rowspan="2">Percent</th><th rowspan="2">Grade</th></tr>
+                        <tr><th>/20</th><th>/20</th><th>/60</th></tr>
+                    </thead>
+                    <tbody id="learners"></tbody>
+                    <tfoot><tr id="class-average"><td colspan="3">Class average</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr></tfoot>
+                </table>
+            </div>
+            <div class="actions" style="margin-top:1rem;">
+                <button type="submit" id="save-button">Save All Scores</button>
+                <button type="button" class="secondary" id="print-button" onclick="window.print()">Print Gradebook</button>
+            </div>
+        </form>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const classId = Number(params.get('classId'));
+        const subjectId = Number(params.get('subjectId'));
+        const term = params.get('term') || '';
+        const sessionYear = params.get('sessionYear') || '';
+        if (sessionStorage.getItem('role') === 'teacher') {
+            document.getElementById('back-link').href = 'teacher-dashboard.html';
+            document.getElementById('back-link').textContent = 'Teacher page';
+        }
+
+        function scoreField(name, value, learnerId) {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.name = name;
+            input.min = '0';
+            input.max = name === 'exam' ? '60' : '20';
+            input.step = '0.01';
+            input.required = false;
+            input.value = value === null || value === undefined ? '' : value;
+            input.dataset.learnerId = String(learnerId);
+            input.setAttribute('aria-label', `${name.toUpperCase()} score`);
+            return input;
+        }
+
+        function updateTotal(learnerId) {
+            const row = document.querySelector(`tr[data-learner-id="${learnerId}"]`);
+            const values = ['ca1', 'ca2', 'exam'].map(name =>
+                Number(row.querySelector(`[name="${name}"]`).value)
+            );
+            const inputs = ['ca1', 'ca2', 'exam'].map(name => row.querySelector(`[name="${name}"]`));
+            const complete = inputs.every(input => input.value !== '') && values.every(Number.isFinite);
+            const total = complete ? values.reduce((sum, score) => sum + score, 0) : null;
+            row.querySelector('.total').textContent = total === null ? '—' : total.toFixed(2);
+            row.querySelector('.percentage').textContent = total === null ? '—' : `${total.toFixed(2)}%`;
+            row.querySelector('.grade').textContent = total === null ? '—' : gradeFor(total);
+            updateClassAverage();
+        }
+
+        function gradeFor(total) {
+            if (total >= 70) return 'A';
+            if (total >= 60) return 'B';
+            if (total >= 50) return 'C';
+            if (total >= 45) return 'D';
+            if (total >= 40) return 'E';
+            return 'F';
+        }
+
+        function updateClassAverage() {
+            const rows = [...document.querySelectorAll('#learners tr:not([hidden])')];
+            const cells = document.querySelectorAll('#class-average td');
+            ['ca1', 'ca2', 'exam'].forEach((name, index) => {
+                const values = rows.map(row => row.querySelector(`[name="${name}"]`).value)
+                    .filter(value => value !== '').map(Number);
+                cells[index + 1].textContent = values.length
+                    ? (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)
+                    : '—';
+            });
+            const totals = rows.map(row => row.querySelector('.total').textContent)
+                .filter(value => value !== '—').map(Number);
+            cells[4].textContent = totals.length
+                ? (totals.reduce((sum, value) => sum + value, 0) / totals.length).toFixed(2)
+                : '—';
+            cells[5].textContent = totals.length
+                ? `${(totals.reduce((sum, value) => sum + value, 0) / totals.length).toFixed(2)}%`
+                : '—';
+            cells[6].textContent = totals.length
+                ? gradeFor(totals.reduce((sum, value) => sum + value, 0) / totals.length)
+                : '—';
+        }
+
+        async function loadSheet() {
+            const status = document.getElementById('status');
+            if (!Number.isInteger(classId) || classId <= 0 ||
+                !Number.isInteger(subjectId) || subjectId <= 0 || !term || !sessionYear) {
+                status.textContent = 'Invalid score sheet. Return to Upload Results and select all information.';
+                document.getElementById('score-form').hidden = true;
+                return;
+            }
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const query = new URLSearchParams({
+                    classId: String(classId),
+                    subjectId: String(subjectId),
+                    term,
+                    sessionYear
+                });
+                const response = await fetch(`${baseUrl}/api/result-sheet?${query}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load result sheet.');
+                const classLabel = `${data.class.class_name} - ${data.class.section}` +
+                    (data.class.stream ? ` (${data.class.stream})` : '');
+                document.getElementById('sheet-details').textContent =
+                    `${classLabel} | SUBJECT: ${data.subject.name} | ${term.toUpperCase()} | SESSION: ${sessionYear}`;
+                const body = document.getElementById('learners');
+                const learnerFilter = document.getElementById('learner-filter');
+                body.replaceChildren();
+                learnerFilter.replaceChildren(new Option('All learners in this class', ''));
+                data.learners.forEach((learner, index) => {
+                    const row = document.createElement('tr');
+                    row.dataset.learnerId = learner.learner_id;
+                    row.dataset.learnerName = `${learner.surname} ${learner.othername}`.trim();
+                    const learnerLabel = learner.admission_number
+                        ? `${row.dataset.learnerName} (${learner.admission_number})`
+                        : row.dataset.learnerName;
+                    learnerFilter.add(new Option(learnerLabel, String(learner.learner_id)));
+                    const indexCell = document.createElement('td');
+                    indexCell.textContent = String(index + 1);
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = `${learner.surname} ${learner.othername}`;
+                    const admissionCell = document.createElement('td');
+                    admissionCell.textContent = learner.admission_number || '—';
+                    row.append(indexCell, nameCell, admissionCell);
+                    ['ca1', 'ca2', 'exam'].forEach(name => {
+                        const cell = document.createElement('td');
+                        cell.appendChild(scoreField(name, learner[name], learner.learner_id));
+                        row.appendChild(cell);
+                    });
+                    const totalCell = document.createElement('td');
+                    totalCell.className = 'total';
+                    const complete = [learner.ca1, learner.ca2, learner.exam].every(value => value !== null);
+                    const total = complete
+                        ? Number(learner.ca1) + Number(learner.ca2) + Number(learner.exam)
+                        : null;
+                    totalCell.textContent = total === null ? '—' : total.toFixed(2);
+                    const percentageCell = document.createElement('td');
+                    percentageCell.className = 'percentage';
+                    percentageCell.textContent = total === null ? '—' : `${total.toFixed(2)}%`;
+                    const gradeCell = document.createElement('td');
+                    gradeCell.className = 'grade';
+                    gradeCell.textContent = total === null ? '—' : gradeFor(total);
+                    row.append(totalCell, percentageCell, gradeCell);
+                    row.querySelectorAll('input').forEach(input =>
+                        input.addEventListener('input', () => updateTotal(learner.learner_id))
+                    );
+                    body.appendChild(row);
+                });
+                updateClassAverage();
+                learnerFilter.disabled = data.learners.length === 0;
+                status.textContent = data.learners.length
+                    ? `${data.learners.length} learner(s) in this class. Choose one learner or enter scores for the whole class. Saved scores can be edited.`
+                    : 'No learners are registered in this class yet.';
+                document.getElementById('save-button').disabled = data.learners.length === 0;
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load learner scores.';
+            }
+        }
+
+        document.getElementById('score-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            const status = document.getElementById('status');
+            const saveButton = document.getElementById('save-button');
+            const visibleRows = [...document.querySelectorAll('#learners tr:not([hidden])')];
+            const incompleteRow = visibleRows.find(row =>
+                ['ca1', 'ca2', 'exam'].some(name => {
+                    const input = row.querySelector(`[name="${name}"]`);
+                    return input.value === '' || !input.checkValidity();
+                })
+            );
+            if (incompleteRow) {
+                status.textContent = `Enter valid CA1, CA2, and exam scores for ${incompleteRow.dataset.learnerName}.`;
+                incompleteRow.querySelector('input:invalid')?.focus();
+                return;
+            }
+            const rows = visibleRows.map(row => ({
+                learnerId: Number(row.dataset.learnerId),
+                ca1: Number(row.querySelector('[name="ca1"]').value),
+                ca2: Number(row.querySelector('[name="ca2"]').value),
+                exam: Number(row.querySelector('[name="exam"]').value)
+            }));
+            if (!rows.length) {
+                status.textContent = 'Select at least one learner.';
+                return;
+            }
+            if (rows.some(row => row.ca1 > 20 || row.ca2 > 20 || row.exam > 60)) {
+                status.textContent = 'CA1 and CA2 cannot exceed 20; exam cannot exceed 60.';
+                return;
+            }
+            saveButton.disabled = true;
+            status.textContent = 'Saving scores…';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/result-sheet`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ classId, subjectId, term, sessionYear, rows })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to save scores.');
+                const learnerChoice = document.getElementById('learner-filter');
+                const scope = learnerChoice.value
+                    ? learnerChoice.options[learnerChoice.selectedIndex].text
+                    : 'the selected class';
+                status.textContent = `Saved scores for ${scope}.`;
+            } catch (error) {
+                status.textContent = error.message || 'Unable to save scores.';
+            } finally {
+                saveButton.disabled = false;
+            }
+        });
+        document.getElementById('learner-filter').addEventListener('change', event => {
+            const selectedLearner = event.target.value;
+            document.querySelectorAll('#learners tr').forEach(row => {
+                row.hidden = Boolean(selectedLearner) && row.dataset.learnerId !== selectedLearner;
+            });
+            updateClassAverage();
+        });
+        loadSheet();
+    </script>
+</body>
+</html>

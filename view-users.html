@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Users - Jasola Model School</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            padding: 2rem;
+            background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+                        url('https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=1920&q=80') no-repeat center center/cover;
+        }
+
+        .view-container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .view-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .view-header h1 {
+            color: #1a202c;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .view-header p {
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+        }
+
+        table th,
+        table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        table th {
+            background: #2c5282;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        table tr:hover {
+            background: #f7fafc;
+        }
+
+        table td {
+            color: #4a5568;
+        }
+
+        .no-users {
+            text-align: center;
+            color: #4a5568;
+            padding: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .bottom-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .bottom-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .bottom-btn.go-back {
+            background: #718096;
+            color: #fff;
+        }
+
+        .bottom-btn.go-back:hover {
+            background: #4a5568;
+        }
+
+        .bottom-btn.add-user {
+            background: #38a169;
+            color: #fff;
+        }
+
+        .bottom-btn.add-user:hover {
+            background: #2f855a;
+        }
+
+        .bottom-btn.refresh {
+            background: #2c5282;
+            color: #fff;
+        }
+
+        .bottom-btn.refresh:hover {
+            background: #1a365d;
+        }
+
+        /* Navigation */
+        nav {
+            background: #fff;
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c5282;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: #2c5282;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">Jasola Model School</div>
+        <ul class="nav-links">
+            <li><a href="#download">School code</a></li>
+        </ul>
+    </nav>
+
+    <div class="view-container">
+        <div class="view-header">
+            <h1>View Users</h1>
+            <p>List of all registered users</p>
+        </div>
+        <p id="credential-message" role="status" style="display:none; padding:1rem; margin:1rem 0; background:#ebf8ff; color:#1a365d; border-radius:5px;"></p>
+        <div id="users-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Surname</th>
+                        <th>Other Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Role</th>
+                        <th>Teacher login</th>
+                    </tr>
+                </thead>
+                <tbody id="users-list">
+                </tbody>
+            </table>
+        </div>
+        <div class="bottom-buttons">
+            <button class="bottom-btn go-back" onclick="window.location.href='dashboard.html'">Go Back</button>
+            <button class="bottom-btn add-user" onclick="window.location.href='add-user.html'">Add User</button>
+            <button class="bottom-btn refresh" onclick="loadUsers()">Refresh</button>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        async function loadUsers() {
+            const usersList = document.getElementById('users-list');
+            const usersTable = document.getElementById('users-table');
+
+            try {
+                const baseUrl = window.location.protocol === 'file:' ? 'http://127.0.0.1:3000' : window.location.origin;
+                const response = await fetch(`${baseUrl}/api/users`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Unable to load users');
+                }
+
+                const users = Array.isArray(data) ? data : [];
+
+                if (users.length === 0) {
+                    usersList.innerHTML = '<tr><td class="no-users" colspan="6">No users found. Click "Add User" to create one.</td></tr>';
+                    return;
+                }
+
+                usersList.replaceChildren();
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    [user.surname, user.othername, user.email, user.phone, user.role].forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = value || '';
+                        row.appendChild(cell);
+                    });
+                    const actionCell = document.createElement('td');
+                    if (user.role === 'teacher') {
+                        const credentialsButton = document.createElement('button');
+                        credentialsButton.type = 'button';
+                        credentialsButton.textContent = 'Generate / reset login';
+                        credentialsButton.addEventListener('click', () => generateTeacherCredentials(user.username));
+                        const passwordButton = document.createElement('button');
+                        passwordButton.type = 'button';
+                        passwordButton.textContent = 'Change password';
+                        passwordButton.style.marginLeft = '0.5rem';
+                        passwordButton.addEventListener('click', () => changeTeacherPassword(user.username));
+                        actionCell.append(credentialsButton, passwordButton);
+                    } else {
+                        actionCell.textContent = '—';
+                    }
+                    row.appendChild(actionCell);
+                    usersList.appendChild(row);
+                });
+            } catch (err) {
+                console.error('Fetch users error:', err);
+                usersList.innerHTML = '<tr><td class="no-users" colspan="6">Unable to load users. Please try again.</td></tr>';
+            }
+        }
+
+        async function generateTeacherCredentials(username) {
+            if (!confirm(`Set ${username}'s login username to their other names and password to their surname?`)) return;
+            const message = document.getElementById('credential-message');
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/teachers/${encodeURIComponent(username)}/credentials`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to generate credentials.');
+                message.textContent = `Teacher login details: username ${data.username}; password ${data.password} (surname).`;
+                message.style.display = 'block';
+                await loadUsers();
+            } catch (err) {
+                message.textContent = err.message;
+                message.style.display = 'block';
+            }
+        }
+
+        async function changeTeacherPassword(username) {
+            const newPassword = prompt(`Enter a new password for ${username} (at least 8 characters):`);
+            if (newPassword === null) return;
+            const message = document.getElementById('credential-message');
+            if (newPassword.length < 8) {
+                message.textContent = 'Password must be at least 8 characters.';
+                message.style.display = 'block';
+                return;
+            }
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/teachers/${encodeURIComponent(username)}/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newPassword })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to change teacher password.');
+                message.textContent = `Password changed for ${username}. Share the new password securely with the teacher.`;
+                message.style.display = 'block';
+            } catch (err) {
+                message.textContent = err.message;
+                message.style.display = 'block';
+            }
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Dashboard - Jasola Model School</title>
+    <style>
+        body { min-height: 100vh; padding: 2rem; background: #f3f6fa; font-family: 'Segoe UI', Tahoma, sans-serif; color: #1a202c; }
+        main { max-width: 900px; margin: 3rem auto; }
+        header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+        .card { display: block; padding: 1.5rem; border-radius: 10px; background: #fff; color: #2c5282; text-decoration: none; box-shadow: 0 4px 12px #00000012; }
+        .card:hover { background: #edf2f7; }
+        button { padding: .7rem 1rem; border: 0; border-radius: 5px; background: #2c5282; color: #fff; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <h1>Teacher Portal</h1>
+                <p id="teacher-name">Welcome</p>
+            </div>
+        </header>
+        <section class="cards" aria-label="Teacher actions">
+            <a class="card" href="upload-result.html"><h2>Upload results</h2><p>Enter results only for your allocated subjects.</p></a>
+            <a class="card" href="class-gradebook.html"><h2>Class gradebook</h2><p>See your allocated subjects and collated learner totals.</p></a>
+            <a class="card" href="change-password.html"><h2>Change password</h2><p>Keep your account secure.</p></a>
+            <a class="card" href="teacher-settings.html"><h2>Settings</h2><p>View your account settings.</p></a>
+        </section>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        if (sessionStorage.getItem('role') !== 'teacher') {
+            window.location.replace(sessionStorage.getItem('role') === 'admin' ? 'dashboard.html' : 'login.html');
+        }
+        document.getElementById('teacher-name').textContent =
+            `Welcome, ${sessionStorage.getItem('username') || 'Teacher'}`;
+    </script>
+</body>
+</html>

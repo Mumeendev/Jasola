@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Settings - Jasola Model School</title>
+    <style>
+        body { min-height:100vh; margin:0; padding:2rem; background:#f3f6fa; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { max-width:700px; margin:3rem auto; padding:2rem; border-radius:10px; background:#fff; box-shadow:0 4px 12px #00000012; }
+        header { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+        .setting { padding:1rem 0; border-bottom:1px solid #e2e8f0; }
+        .label { display:inline-block; min-width:130px; font-weight:600; }
+        button, .button { display:inline-block; margin:1rem .5rem 0 0; padding:.7rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; }
+        #status { color:#4a5568; }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <div><h1>Teacher Settings</h1><p>Account information and security</p></div>
+            <a class="button" href="teacher-dashboard.html">Teacher page</a>
+        </header>
+        <p id="status" role="status">Loading settings…</p>
+        <section id="account" hidden>
+            <div class="setting"><span class="label">Username</span><span id="username"></span></div>
+            <div class="setting"><span class="label">Name</span><span id="name"></span></div>
+            <div class="setting"><span class="label">Email</span><span id="email"></span></div>
+            <div class="setting"><span class="label">Phone</span><span id="phone"></span></div>
+            <a class="button" href="change-password.html">Change password</a>
+            <button type="button" onclick="logout()">Log out</button>
+        </section>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        if (sessionStorage.getItem('role') !== 'teacher') {
+            window.location.replace(sessionStorage.getItem('role') === 'admin' ? 'dashboard.html' : 'login.html');
+        }
+
+        async function loadSettings() {
+            const status = document.getElementById('status');
+            try {
+                const username = sessionStorage.getItem('username');
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/user/${encodeURIComponent(username)}`);
+                const profile = await response.json();
+                if (!response.ok) throw new Error(profile.error || 'Unable to load account settings.');
+                document.getElementById('username').textContent = profile.username || '';
+                document.getElementById('name').textContent =
+                    [profile.surname, profile.othername].filter(Boolean).join(' ');
+                document.getElementById('email').textContent = profile.email || 'Not provided';
+                document.getElementById('phone').textContent = profile.phone || 'Not provided';
+                document.getElementById('account').hidden = false;
+                status.textContent = '';
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load account settings.';
+            }
+        }
+
+        function logout() {
+            sessionStorage.clear();
+            window.location.replace('login.html');
+        }
+        loadSettings();
+    </script>
+</body>
+</html>

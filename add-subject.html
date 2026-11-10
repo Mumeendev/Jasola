@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Subject - Jasola Model School</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+                        url('https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=1920&q=80') no-repeat center center/cover;
+            padding: 2rem;
+        }
+
+        .form-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 3rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .form-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .form-header h1 {
+            color: #1a202c;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-header p {
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            color: #1a202c;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2c5282;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #2c5282;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            margin-top: 1rem;
+        }
+
+        .submit-btn:hover {
+            background: #1a365d;
+        }
+
+        .bottom-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .bottom-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .bottom-btn.go-back {
+            background: #718096;
+            color: #fff;
+        }
+
+        .bottom-btn.go-back:hover {
+            background: #4a5568;
+        }
+
+        .bottom-btn.view-subjects {
+            background: #2c5282;
+            color: #fff;
+        }
+
+        .bottom-btn.view-subjects:hover {
+            background: #1a365d;
+        }
+
+        .bottom-btn.add-subject {
+            background: #38a169;
+            color: #fff;
+        }
+
+        .bottom-btn.add-subject:hover {
+            background: #2f855a;
+        }
+
+        /* Navigation */
+        nav {
+            background: #fff;
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c5282;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: #2c5282;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">Jasola Model School</div>
+        <ul class="nav-links">
+            <li><a href="#download">School code</a></li>
+        </ul>
+    </nav>
+
+    <div class="form-container">
+        <div class="form-header">
+            <h1>Add Subject</h1>
+            <p>Fill in the details to add a new subject</p>
+        </div>
+        <form id="add-subject-form">
+            <div class="form-group">
+                <label for="subject-name">Subject Name</label>
+                <input type="text" id="subject-name" name="subject-name" placeholder="Enter subject name" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Select Category (Tick to Choose)</label>
+                <div style="display: flex; flex-direction: column; gap: 1rem; background: #f7fafc; padding: 1.5rem; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    
+                    <label style="display: flex; align-items: center; cursor: pointer; font-size: 1.1rem; font-weight: 600; color: #2d3748;">
+                        <input type="checkbox" value="Creche" class="cat-checkbox" style="width: 20px; height: 20px; margin-right: 15px;"> Creche
+                    </label>
+
+                    <label style="display: flex; align-items: center; cursor: pointer; font-size: 1.1rem; font-weight: 600; color: #2d3748;">
+                        <input type="checkbox" value="Primary" class="cat-checkbox" style="width: 20px; height: 20px; margin-right: 15px;"> Primary
+                    </label>
+
+                    <label style="display: flex; align-items: center; cursor: pointer; font-size: 1.1rem; font-weight: 600; color: #2d3748;">
+                        <input type="checkbox" value="Secondary" class="cat-checkbox" style="width: 20px; height: 20px; margin-right: 15px;"> Secondary
+                    </label>
+
+                </div>
+            </div>
+            <div class="form-group" id="subject-stream-field" hidden>
+                <label for="subject-stream">Senior secondary stream</label>
+                <select id="subject-stream">
+                    <option value="">All streams (common subject)</option>
+                    <option value="Science">Science</option>
+                    <option value="Arts">Arts</option>
+                    <option value="Commercial">Commercial</option>
+                </select>
+                <p style="color:#4a5568;font-size:.9rem;">Choose a stream for a specialized subject, or leave it common to all streams.</p>
+            </div>
+            <p id="subject-status" role="status"></p>
+            
+            <button type="submit" class="submit-btn">Add Subject</button>
+        </form>
+        <div class="bottom-buttons">
+            <button class="bottom-btn go-back" onclick="window.location.href='dashboard.html'">Go Back</button>
+            <button class="bottom-btn view-subjects" onclick="window.location.href='view-subjects.html'">View Subjects</button>
+            <button class="bottom-btn add-subject" onclick="document.getElementById('add-subject-form').reset()">Add Subject</button>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        const categoryCheckboxes = [...document.querySelectorAll('.cat-checkbox')];
+        const streamField = document.getElementById('subject-stream-field');
+        const streamSelect = document.getElementById('subject-stream');
+
+        function updateSubjectStreamField() {
+            streamField.hidden = !categoryCheckboxes.some(checkbox =>
+                checkbox.checked && checkbox.value === 'Secondary'
+            );
+            if (streamField.hidden) streamSelect.value = '';
+        }
+
+        categoryCheckboxes.forEach(checkbox =>
+            checkbox.addEventListener('change', updateSubjectStreamField)
+        );
+
+        document.getElementById('add-subject-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const name = document.getElementById('subject-name').value.trim();
+            const selectedCategories = categoryCheckboxes
+                .filter(checkbox => checkbox.checked)
+                .map(checkbox => checkbox.value);
+            const status = document.getElementById('subject-status');
+
+            if (selectedCategories.length === 0) {
+                status.textContent = 'Select at least one category.';
+                return;
+            }
+
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                for (const className of selectedCategories) {
+                    const response = await fetch(`${baseUrl}/api/subjects`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name,
+                            className,
+                            stream: className === 'Secondary' ? streamSelect.value : ''
+                        })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || `Unable to add ${className} subject.`);
+                }
+                status.textContent = 'Subject added to the selected categories.';
+                this.reset();
+                updateSubjectStreamField();
+            } catch (err) {
+                status.textContent = err.message || 'Unable to add subject.';
+            }
+        });
+    </script>
+</body>
+</html>

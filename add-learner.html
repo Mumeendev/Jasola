@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Learner - Jasola Model School</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+                        url('https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=1920&q=80') no-repeat center center/cover;
+            padding: 2rem;
+        }
+
+        .form-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .form-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .form-header h1 {
+            color: #1a202c;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            color: #1a202c;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        .category-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #2c5282;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            margin-top: 1rem;
+        }
+
+        .submit-btn:hover {
+            background: #1a365d;
+        }
+
+        .back-btn {
+            display: block;
+            text-align: center;
+            margin-top: 1.5rem;
+            color: #2c5282;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <div class="form-header">
+            <h1>Add Learner</h1>
+            <p>Register a new student</p>
+        </div>
+        <form id="add-learner-form">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label for="surname">Surname</label>
+                    <input type="text" id="surname" required>
+                </div>
+                <div class="form-group">
+                    <label for="othername">Other Name</label>
+                    <input type="text" id="othername" required>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label for="gender">Gender</label>
+                    <select id="gender" required>
+                        <option value="" disabled selected>Select</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="dob">Date of Birth</label>
+                    <input type="date" id="dob" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="learner-class">Class and section</label>
+                <select id="learner-class" required>
+                    <option value="" disabled selected>Loading classes...</option>
+                </select>
+            </div>
+
+            <button type="submit" class="submit-btn">Register Learner</button>
+        </form>
+        <a href="dashboard.html" class="back-btn">Back to Dashboard</a>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        async function loadClasses() {
+            const select = document.getElementById('learner-class');
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/classes`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load classes.');
+                select.innerHTML = '<option value="" disabled selected>Select class and section</option>';
+                classes.forEach(classRow => {
+                    const option = document.createElement('option');
+                    option.value = classRow.id;
+                    option.textContent = `${classRow.class_name} - ${classRow.section}`;
+                    select.appendChild(option);
+                });
+                if (!classes.length) select.innerHTML = '<option value="">Create a class first</option>';
+            } catch (error) {
+                select.innerHTML = '<option value="">Unable to load classes</option>';
+            }
+        }
+
+        document.getElementById('add-learner-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const payload = {
+                surname: document.getElementById('surname').value,
+                othername: document.getElementById('othername').value,
+                gender: document.getElementById('gender').value,
+                dob: document.getElementById('dob').value,
+                classId: Number(document.getElementById('learner-class').value)
+            };
+
+            try {
+                const baseUrl = window.location.protocol === 'file:' ? 'http://127.0.0.1:3000' : window.location.origin;
+                const response = await fetch(`${baseUrl}/api/learners`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    alert('Learner registered successfully!');
+                    e.target.reset();
+                } else {
+                    const err = await response.json();
+                    alert('Error: ' + (err.error || 'Registration failed'));
+                }
+            } catch (err) {
+                alert('Server connection error.');
+            }
+        });
+        loadClasses();
+    </script>
+</body>
+</html>

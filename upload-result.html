@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Result - Jasola Model School</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+                        url('https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=1920&q=80') no-repeat center center/cover;
+            padding: 2rem;
+        }
+
+        .form-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 3rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .form-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .form-header h1 {
+            color: #1a202c;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-header p {
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            color: #1a202c;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2c5282;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #2c5282;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            margin-top: 1rem;
+        }
+
+        .submit-btn:hover {
+            background: #1a365d;
+        }
+
+        .bottom-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .bottom-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .bottom-btn.go-back {
+            background: #718096;
+            color: #fff;
+        }
+
+        .bottom-btn.go-back:hover {
+            background: #4a5568;
+        }
+
+        .bottom-btn.view-results {
+            background: #2c5282;
+            color: #fff;
+        }
+
+        .bottom-btn.view-results:hover {
+            background: #1a365d;
+        }
+
+        .bottom-btn.upload-result {
+            background: #38a169;
+            color: #fff;
+        }
+
+        .bottom-btn.upload-result:hover {
+            background: #2f855a;
+        }
+
+        /* Navigation */
+        nav {
+            background: #fff;
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c5282;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: #2c5282;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">Jasola Model School</div>
+        <ul class="nav-links">
+            <li><a href="#download">School code</a></li>
+        </ul>
+    </nav>
+
+    <div class="form-container">
+        <div class="form-header">
+            <h1>Upload Result</h1>
+            <p>Choose an allocated class and subject, then enter scores for each learner.</p>
+        </div>
+        <form id="upload-result-form">
+            <div class="form-group">
+                <label for="class">Class</label>
+                <select id="class" name="class" required>
+                    <option value="" disabled selected>Select class</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="subject">Subject</label>
+                <select id="subject" name="subject" required>
+                    <option value="" disabled selected>Select subject</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="term">Term</label>
+                <select id="term" name="term" required>
+                    <option value="" disabled selected>Select term</option>
+                    <option value="First Term">First Term</option>
+                    <option value="Second Term">Second Term</option>
+                    <option value="Third Term">Third Term</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="session">Session</label>
+                <input id="session" name="session" type="text" inputmode="numeric"
+                       pattern="[0-9]{4}/[0-9]{4}" placeholder="e.g. 2025/2026"
+                       title="Enter the session as YYYY/YYYY" required>
+            </div>
+            <button type="submit" class="submit-btn">Continue to Learner Score Sheet</button>
+        </form>
+        <div class="bottom-buttons">
+            <button class="bottom-btn go-back" id="back-button" onclick="window.location.href='dashboard.html'">Go Back</button>
+            <button class="bottom-btn view-results" id="view-results-button" onclick="window.location.href='view-results.html'">View Results</button>
+            <button class="bottom-btn upload-result" onclick="document.getElementById('upload-result-form').reset()">Clear Form</button>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        if (sessionStorage.getItem('role') === 'teacher') {
+            document.getElementById('back-button').onclick = () => {
+                window.location.href = 'teacher-dashboard.html';
+            };
+            document.getElementById('view-results-button').hidden = true;
+        }
+        let availableSubjects = [];
+        let availableClasses = [];
+        const classSelect = document.getElementById('class');
+        async function loadOptions() {
+            const subjectSelect = document.getElementById('subject');
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const [classesResponse, subjectsResponse] = await Promise.all([
+                    fetch(`${baseUrl}/api/classes`),
+                    fetch(`${baseUrl}/api/subjects`)
+                ]);
+                availableClasses = await classesResponse.json();
+                availableSubjects = await subjectsResponse.json();
+                if (!classesResponse.ok) throw new Error(availableClasses.error || 'Unable to load classes.');
+                if (!subjectsResponse.ok) throw new Error(availableSubjects.error || 'Unable to load subjects.');
+                classSelect.innerHTML = '<option value="" disabled selected>Select class</option>';
+                availableClasses.forEach(classRow => {
+                    const option = document.createElement('option');
+                    option.value = classRow.id;
+                    option.textContent = `${classRow.class_name} - ${classRow.section}` +
+                        (classRow.stream ? ` (${classRow.stream})` : '');
+                    classSelect.appendChild(option);
+                });
+                if (!availableClasses.length) {
+                    classSelect.innerHTML = '<option value="" disabled selected>No allocated classes</option>';
+                    subjectSelect.innerHTML = '<option value="" disabled selected>Ask an administrator to allocate a class and subject</option>';
+                    return;
+                }
+                updateSubjects();
+            } catch (err) {
+                subjectSelect.innerHTML = '<option value="" disabled selected>Could not load allocated subjects</option>';
+                console.error('Fetch subjects error:', err);
+            }
+        }
+
+        function updateSubjects() {
+            const subjectSelect = document.getElementById('subject');
+            subjectSelect.innerHTML = '<option value="" disabled selected>Select subject</option>';
+            availableSubjects
+                .filter(subject => Number(subject.class_id) === Number(classSelect.value))
+                .filter(subject => {
+                    const selectedClass = availableClasses.find(item =>
+                        Number(item.id) === Number(classSelect.value)
+                    );
+                    return !selectedClass || !subject.stream || !selectedClass.stream ||
+                        subject.stream === selectedClass.stream;
+                })
+                .forEach(subject => {
+                    const option = document.createElement('option');
+                    option.value = subject.id;
+                    option.textContent = `${subject.name}${subject.stream ? ` - ${subject.stream}` : ''} ` +
+                        `(${subject.allocated_class_name} - ${subject.section})`;
+                    subjectSelect.appendChild(option);
+                });
+        }
+
+        classSelect.addEventListener('change', updateSubjects);
+        loadOptions();
+
+        // Form submission
+        document.getElementById('upload-result-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const classId = Number(document.getElementById('class').value);
+            const subjectId = Number(document.getElementById('subject').value);
+            const term = document.getElementById('term').value;
+            const sessionYear = document.getElementById('session').value;
+            const query = new URLSearchParams({
+                classId: String(classId),
+                subjectId: String(subjectId),
+                term,
+                sessionYear
+            });
+            window.location.href = `result-sheet.html?${query}`;
+        });
+    </script>
+</body>
+</html>

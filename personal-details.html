@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Details - Jasola Model School</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)),
+                        url('https://plus.unsplash.com/premium_photo-1681680196967-1ebbf45bb4fd?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8cGDPJTIwYSUyMGxhcHRvcHxlbnwwfHwwfHx8MA%3D%3D') no-repeat center center/cover;
+            padding: 2rem;
+        }
+
+        /* Navigation */
+        nav {
+            background: #fff;
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c5282;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: #2c5282;
+        }
+
+        .page-container {
+            max-width: 800px;
+            margin: 0 auto;
+            margin-top: 80px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            color: #fff;
+            font-size: 2rem;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 0.75rem 1.5rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .details-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .label {
+            font-weight: 600;
+            color: #2d3748;
+            flex: 1;
+        }
+
+        .value {
+            color: #4a5568;
+            flex: 2;
+        }
+
+        .loading {
+            text-align: center;
+            color: #fff;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">Jasola Model School</div>
+        <ul class="nav-links">
+            <li><a href="#download">School code</a></li>
+        </ul>
+    </nav>
+
+    <div class="page-container">
+        <div class="header">
+            <h1>Personal Details</h1>
+            <a href="dashboard.html" class="back-btn">Back to Dashboard</a>
+        </div>
+
+        <div id="loading" class="loading">Loading details...</div>
+        
+        <div id="details-card" class="details-card" style="display: none;">
+            <div class="detail-row">
+                <span class="label">Username:</span>
+                <span class="value" id="disp-username"></span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Surname:</span>
+                <span class="value" id="disp-surname"></span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Other Name:</span>
+                <span class="value" id="disp-othername"></span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Email Address:</span>
+                <span class="value" id="disp-email"></span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Phone Number:</span>
+                <span class="value" id="disp-phone"></span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Role:</span>
+                <span class="value" id="disp-role" style="text-transform: capitalize;"></span>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        // Check login
+        if (!sessionStorage.getItem('token')) {
+            window.location.href = 'login.html';
+        }
+
+        async function loadProfile() {
+            const username = sessionStorage.getItem('username');
+            try {
+                const baseUrl = window.location.protocol === 'file:' ? 'http://127.0.0.1:3000' : window.location.origin;
+                const response = await fetch(`${baseUrl}/api/user/${username}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('disp-username').textContent = data.username || 'N/A';
+                    document.getElementById('disp-surname').textContent = data.surname || 'N/A';
+                    document.getElementById('disp-othername').textContent = data.othername || 'N/A';
+                    document.getElementById('disp-email').textContent = data.email || 'N/A';
+                    document.getElementById('disp-phone').textContent = data.phone || 'N/A';
+                    document.getElementById('disp-role').textContent = data.role || 'N/A';
+
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('details-card').style.display = 'block';
+                } else {
+                    document.getElementById('loading').textContent = 'Error: ' + data.error;
+                }
+            } catch (err) {
+                console.error('Profile fetch error:', err);
+                document.getElementById('loading').textContent = 'Server error. Please try again later.';
+            }
+        }
+
+        loadProfile();
+    </script>
+</body>
+</html>

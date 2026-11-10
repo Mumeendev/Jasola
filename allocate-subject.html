@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Allocate Class and Subjects - Jasola Model School</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { min-height:100vh; margin:0; display:grid; place-items:center; padding:2rem; background:#f3f6fa; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { width:100%; max-width:650px; padding:2rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000014; }
+        h1 { margin-top:0; }
+        label { display:block; margin:1.2rem 0 .4rem; font-weight:600; }
+        select, button { width:100%; padding:.8rem; border:1px solid #cbd5e0; border-radius:5px; font-size:1rem; }
+        button { margin-top:1rem; border:0; background:#2c5282; color:#fff; cursor:pointer; }
+        .subjects { max-height:250px; overflow:auto; padding:1rem; border:1px solid #cbd5e0; border-radius:5px; }
+        .subjects label { display:flex; gap:.7rem; align-items:center; margin:.4rem 0; cursor:pointer; }
+        .subjects input { width:18px; height:18px; }
+        #status { min-height:1.5rem; }
+        #credentials { padding:1rem; background:#ebf8ff; border-radius:5px; overflow-wrap:anywhere; }
+        a { color:#2c5282; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Allocate Class and Subjects</h1>
+        <p>Choose the teacher and class, then select every subject they can upload for that class.</p>
+        <form id="allocation-form">
+            <label for="teacher">Teacher</label>
+            <select id="teacher" required><option value="">Loading teachers…</option></select>
+            <label for="class">Class and section</label>
+            <select id="class" required><option value="">Loading classes…</option></select>
+            <label>Subjects allocated for this class</label>
+            <div class="subjects" id="subjects"><p>Select a teacher and class.</p></div>
+            <button type="submit">Save Class and Subject Allocation</button>
+        </form>
+        <p id="status" role="status"></p>
+        <section id="credentials" hidden></section>
+        <a href="dashboard.html">Back to Admin Dashboard</a>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        let allSubjects = [];
+        let allClasses = [];
+        let allocationVersion = 0;
+        const teacherSelect = document.getElementById('teacher');
+        const classSelect = document.getElementById('class');
+        const subjectList = document.getElementById('subjects');
+        const status = document.getElementById('status');
+        const credentials = document.getElementById('credentials');
+
+        async function apiBase() {
+            return window.resolvePortalApiBase();
+        }
+
+        async function loadOptions() {
+            try {
+                const baseUrl = await apiBase();
+                const [teacherResponse, classResponse, subjectResponse] = await Promise.all([
+                    fetch(`${baseUrl}/api/teachers`),
+                    fetch(`${baseUrl}/api/classes`),
+                    fetch(`${baseUrl}/api/subjects?catalog=1`)
+                ]);
+                const [teachers, classes, subjects] = await Promise.all([
+                    teacherResponse.json(), classResponse.json(), subjectResponse.json()
+                ]);
+                if (!teacherResponse.ok) throw new Error(teachers.error || 'Unable to load teachers.');
+                if (!classResponse.ok) throw new Error(classes.error || 'Unable to load classes.');
+                if (!subjectResponse.ok) throw new Error(subjects.error || 'Unable to load subjects.');
+                teacherSelect.innerHTML = '<option value="">Select a teacher</option>';
+                teachers.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.username;
+                    option.textContent = `${item.surname} ${item.othername} (@${item.username})`;
+                    teacherSelect.appendChild(option);
+                });
+                classSelect.innerHTML = '<option value="">Select class and section</option>';
+                classes.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.id;
+                    option.textContent = `${item.class_name} - ${item.section}`;
+                    classSelect.appendChild(option);
+                });
+                allClasses = classes;
+                allSubjects = subjects;
+                if (!teachers.length) status.textContent = 'Add a teacher user before allocating subjects.';
+                else if (!classes.length) status.textContent = 'Add a class before allocating subjects.';
+                renderSubjects([]);
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load allocation options.';
+            }
+        }
+
+        function renderSubjects(selectedIds) {
+            subjectList.replaceChildren();
+            const selectedClass = allClasses.find(item => Number(item.id) === Number(classSelect.value));
+            if (!selectedClass) {
+                subjectList.textContent = 'Select a class to see its subjects.';
+                return;
+            }
+            const className = selectedClass.class_name.toLowerCase();
+            const category = /senior\s+secondary|(?:^|\b)(?:sss?|jss)\s*[-.]?\s*[1-3]\b|secondary/i.test(className)
+                ? 'Secondary'
+                : /primary|pry/i.test(className)
+                    ? 'Primary'
+                    : /creche|nursery|kindergarten|^kg/i.test(className)
+                        ? 'Creche'
+                        : '';
+            const eligibleSubjects = allSubjects.filter(subject =>
+                (!category || subject.class_name === category) &&
+                (!subject.stream || subject.stream === selectedClass.stream)
+            );
+            if (!eligibleSubjects.length) {
+                subjectList.textContent = selectedClass.stream
+                    ? `No ${selectedClass.stream} subjects are available. Add subjects in the subject catalog first.`
+                    : 'No subjects are available for this class category.';
+                return;
+            }
+            if (!allSubjects.length) {
+                subjectList.textContent = 'Add subjects before allocating them.';
+                return;
+            }
+            eligibleSubjects.forEach((subject, index) => {
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.name = 'subjectId';
+                checkbox.value = subject.id;
+                checkbox.checked = selectedIds.includes(Number(subject.id));
+                checkbox.id = `subject-${index}`;
+                const text = document.createElement('span');
+                text.textContent = `${subject.name} (${subject.stream || 'All streams'})`;
+                label.htmlFor = checkbox.id;
+                label.append(checkbox, text);
+                subjectList.appendChild(label);
+            });
+        }
+
+        function showTeacherLoginButton(username) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Create / Reset Teacher Login';
+            button.addEventListener('click', () => createTeacherLogin(username));
+            credentials.replaceChildren(button);
+            credentials.hidden = false;
+        }
+
+        async function loadCurrentAllocations() {
+            const version = ++allocationVersion;
+            credentials.hidden = true;
+            status.textContent = '';
+            if (!teacherSelect.value || !classSelect.value) {
+                renderSubjects([]);
+                return;
+            }
+            status.textContent = 'Loading current allocation…';
+            try {
+                const baseUrl = await apiBase();
+                const response = await fetch(
+                    `${baseUrl}/api/teachers/${encodeURIComponent(teacherSelect.value)}/subjects`
+                );
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load allocation.');
+                if (version !== allocationVersion) return;
+                const current = data.allocations
+                    .filter(item => Number(item.classId) === Number(classSelect.value))
+                    .map(item => Number(item.subjectId));
+                renderSubjects(current);
+                status.textContent = current.length
+                    ? `${current.length} subject(s) currently allocated for this class.`
+                    : 'No subjects allocated for this class yet.';
+                if (current.length) showTeacherLoginButton(teacherSelect.value);
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load allocation.';
+            }
+        }
+
+        document.getElementById('allocation-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            const teacherUsername = teacherSelect.value;
+            const classId = Number(classSelect.value);
+            const subjectIds = [...document.querySelectorAll('input[name="subjectId"]:checked')]
+                .map(input => Number(input.value));
+            if (!teacherUsername || !classId) {
+                status.textContent = 'Choose a teacher and class.';
+                return;
+            }
+            try {
+                const baseUrl = await apiBase();
+                const response = await fetch(`${baseUrl}/api/allocate`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teacherUsername, classId, subjectIds })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to save allocation.');
+                status.textContent = `Saved ${subjectIds.length} subject(s) for ${teacherUsername} in this class.`;
+                if (subjectIds.length) {
+                    showTeacherLoginButton(teacherUsername);
+                } else {
+                    credentials.hidden = true;
+                    credentials.replaceChildren();
+                }
+            } catch (error) {
+                status.textContent = error.message || 'Unable to save allocation.';
+            }
+        });
+
+        async function createTeacherLogin(username) {
+            if (!confirm(`Create or reset ${username}'s login? Their current password will stop working.`)) return;
+            try {
+                const baseUrl = await apiBase();
+                const response = await fetch(`${baseUrl}/api/teachers/${encodeURIComponent(username)}/credentials`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to create teacher login.');
+                const message = document.createElement('p');
+                message.textContent = `Teacher login details: username ${data.username}; password ${data.password} (the teacher's surname). Teacher sign-in: `;
+                const link = document.createElement('a');
+                link.href = `${baseUrl}/login.html`;
+                link.textContent = 'Portal login';
+                message.append(link);
+                credentials.replaceChildren(message);
+            } catch (error) {
+                status.textContent = error.message || 'Unable to create teacher login.';
+            }
+        }
+
+        teacherSelect.addEventListener('change', loadCurrentAllocations);
+        classSelect.addEventListener('change', loadCurrentAllocations);
+        loadOptions();
+    </script>
+</body>
+</html>

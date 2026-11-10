@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print Report Cards - Jasola Model School</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; min-height:100vh; display:grid; place-items:center; padding:2rem; background:#edf2f7; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { width:100%; max-width:620px; padding:2rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000014; }
+        h1 { margin-top:0; color:#1a365d; }
+        label { display:block; margin:1.2rem 0 .4rem; font-weight:600; }
+        select,input { width:100%; padding:.8rem; border:1px solid #cbd5e0; border-radius:5px; font-size:1rem; }
+        button,.button { display:inline-block; margin:1rem .5rem 0 0; padding:.8rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; }
+        #status { color:#4a5568; }
+        #comments-panel { margin-top:1.5rem; padding:1rem; border:1px solid #cbd5e0; border-radius:6px; }
+        #comments-panel[hidden] { display:none; }
+        .comment-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,3fr); gap:.75rem; align-items:start; padding:.75rem 0; border-bottom:1px solid #e2e8f0; }
+        .comment-row textarea { width:100%; min-height:70px; padding:.65rem; border:1px solid #cbd5e0; border-radius:5px; font:inherit; }
+        .comment-name { font-weight:600; }
+        @media (max-width:640px) { .comment-row { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Print Class Report Cards</h1>
+        <p>Choose the class, term, and session to prepare a printable report card for every learner.</p>
+        <form id="report-form">
+            <label for="class">Class and section</label>
+            <select id="class" required><option value="">Loading classes…</option></select>
+            <label for="term">Term</label>
+            <select id="term" required>
+                <option value="">Select term</option>
+                <option>First Term</option>
+                <option>Second Term</option>
+                <option>Third Term</option>
+            </select>
+            <label for="session">Academic session</label>
+            <input id="session" type="text" inputmode="numeric" pattern="[0-9]{4}/[0-9]{4}"
+                   placeholder="e.g. 2025/2026" title="Enter the session as YYYY/YYYY" required>
+            <button type="submit">Prepare Report Cards</button>
+            <button type="button" id="load-comments-button">Admin Comments</button>
+            <a class="button" id="back-link" href="dashboard.html">Back to Dashboard</a>
+        </form>
+        <p id="status" role="status"></p>
+        <section id="comments-panel" hidden>
+            <h2>Administrator Comments</h2>
+            <p>Add or edit a comment for each learner. Leave a field empty to remove that learner's saved comment.</p>
+            <div id="comments-list"></div>
+            <button type="button" id="save-comments-button">Save Comments</button>
+        </section>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        if (sessionStorage.getItem('role') === 'teacher') {
+            document.getElementById('back-link').href = 'teacher-dashboard.html';
+            document.getElementById('back-link').textContent = 'Back to Teacher Page';
+            document.getElementById('load-comments-button').hidden = true;
+        }
+
+        const commentPanel = document.getElementById('comments-panel');
+        const commentsList = document.getElementById('comments-list');
+
+        async function loadLearnerComments() {
+            const classId = document.getElementById('class').value;
+            const term = document.getElementById('term').value;
+            const sessionYear = document.getElementById('session').value.trim();
+            if (!classId || !term || !sessionYear) {
+                document.getElementById('status').textContent =
+                    'Select a class, term, and session before loading learner comments.';
+                return;
+            }
+            const button = document.getElementById('load-comments-button');
+            button.disabled = true;
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const query = new URLSearchParams({ classId, term, sessionYear });
+                const response = await fetch(`${baseUrl}/api/learner-comments?${query}`);
+                const learners = await response.json();
+                if (!response.ok) throw new Error(learners.error || 'Unable to load learner comments.');
+                commentsList.replaceChildren();
+                learners.forEach(learner => {
+                    const row = document.createElement('label');
+                    row.className = 'comment-row';
+                    const name = document.createElement('span');
+                    name.className = 'comment-name';
+                    name.textContent = `${learner.surname} ${learner.othername}` +
+                        (learner.admission_number ? ` (${learner.admission_number})` : '');
+                    const textarea = document.createElement('textarea');
+                    textarea.maxLength = 2000;
+                    textarea.value = learner.comment;
+                    textarea.dataset.learnerId = String(learner.learner_id);
+                    textarea.setAttribute('aria-label', `Administrator comment for ${name.textContent}`);
+                    textarea.placeholder = 'Write a report-card comment for this learner';
+                    row.append(name, textarea);
+                    commentsList.appendChild(row);
+                });
+                commentPanel.hidden = false;
+                document.getElementById('status').textContent = learners.length
+                    ? `${learners.length} learner comment(s) loaded. Save after editing.`
+                    : 'No learners are registered in this class.';
+            } catch (error) {
+                document.getElementById('status').textContent = error.message || 'Unable to load learner comments.';
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        document.getElementById('load-comments-button').addEventListener('click', loadLearnerComments);
+        document.getElementById('save-comments-button').addEventListener('click', async () => {
+            const button = document.getElementById('save-comments-button');
+            button.disabled = true;
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/learner-comments`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        classId: Number(document.getElementById('class').value),
+                        term: document.getElementById('term').value,
+                        sessionYear: document.getElementById('session').value.trim(),
+                        comments: [...commentsList.querySelectorAll('textarea')].map(input => ({
+                            learnerId: Number(input.dataset.learnerId),
+                            comment: input.value
+                        }))
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to save learner comments.');
+                document.getElementById('status').textContent =
+                    `Saved comments for ${data.saved} learner(s). Comments will appear on their report cards.`;
+            } catch (error) {
+                document.getElementById('status').textContent = error.message || 'Unable to save learner comments.';
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+        async function loadClasses() {
+            const select = document.getElementById('class');
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/classes`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load classes.');
+                select.innerHTML = '<option value="">Select class and section</option>';
+                classes.forEach(classRow => {
+                    const option = document.createElement('option');
+                    option.value = classRow.id;
+                    option.textContent = `${classRow.class_name} - ${classRow.section}`;
+                    select.appendChild(option);
+                });
+                if (!classes.length) {
+                    select.innerHTML = '<option value="">No classes available</option>';
+                    document.getElementById('status').textContent =
+                        'Create a class and allocate subjects before printing report cards.';
+                }
+            } catch (error) {
+                select.innerHTML = '<option value="">Unable to load classes</option>';
+                document.getElementById('status').textContent = error.message;
+            }
+        }
+
+        document.getElementById('report-form').addEventListener('submit', event => {
+            event.preventDefault();
+            const query = new URLSearchParams({
+                classId: document.getElementById('class').value,
+                term: document.getElementById('term').value,
+                sessionYear: document.getElementById('session').value
+            });
+            window.location.href = `report-book.html?${query}`;
+        });
+        loadClasses();
+    </script>
+</body>
+</html>

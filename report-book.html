@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Report Cards - Jasola Model School</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:1.5rem; background:#edf2f7; color:#1a202c; font-family:Arial,Helvetica,sans-serif; }
+        main { max-width:1000px; margin:0 auto; }
+        .toolbar { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem; }
+        .toolbar button,.toolbar a { padding:.7rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; }
+        #status { color:#4a5568; }
+        .report-card { min-height:250mm; margin:0 auto 1.5rem; padding:12mm; background:#fff; border:1px solid #cbd5e0; box-shadow:0 3px 12px #00000012; }
+        .school-header { text-align:center; border-bottom:3px double #1a365d; padding-bottom:.7rem; }
+        .school-header h1 { margin:.2rem; color:#1a365d; font-size:22pt; letter-spacing:.06em; }
+        .school-header p { margin:.2rem; font-size:10pt; color:#4a5568; }
+        .report-title { margin:1rem 0; text-align:center; text-transform:uppercase; letter-spacing:.12em; }
+        .student-details { display:grid; grid-template-columns:2fr 1fr 1fr; gap:.55rem 1rem; margin:1rem 0; padding:.8rem; border:1px solid #a0aec0; background:#f7fafc; }
+        .student-details strong { color:#2d3748; }
+        table { width:100%; border-collapse:collapse; font-size:10pt; }
+        th,td { padding:.48rem; border:1px solid #718096; text-align:center; }
+        th { background:#e2e8f0; }
+        th:first-child,td:first-child { text-align:left; }
+        .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:1rem 0; }
+        .summary div { padding:.65rem; border:1px solid #a0aec0; text-align:center; }
+        .summary strong { display:block; margin-bottom:.2rem; font-size:9pt; }
+        .remark { margin:.8rem 0; padding:.6rem; border:1px solid #a0aec0; min-height:2.5rem; }
+        .signatures { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; margin-top:2rem; text-align:center; }
+        .signatures div { padding-top:.45rem; border-top:1px solid #4a5568; font-size:9pt; }
+        .grade-key { margin-top:1rem; color:#4a5568; font-size:8.5pt; }
+        @page { size:A4 portrait; margin:10mm; }
+        @media print {
+            body { padding:0; background:#fff; }
+            main { max-width:none; }
+            .toolbar,#status { display:none !important; }
+            .report-card { min-height:0; margin:0; padding:3mm; border:0; box-shadow:none; break-after:page; page-break-after:always; }
+            .report-card:last-child { break-after:auto; page-break-after:auto; }
+            th { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+        }
+        @media (max-width:640px) {
+            body { padding:.5rem; }
+            .report-card { padding:1rem; }
+            .student-details { grid-template-columns:1fr 1fr; }
+            .summary { grid-template-columns:1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="toolbar">
+            <a id="back-link" href="report-cards.html">Back to selection</a>
+            <button type="button" onclick="window.print()">Print Report Cards</button>
+        </div>
+        <p id="status" role="status">Preparing report cards…</p>
+        <section id="reports"></section>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const classId = Number(params.get('classId'));
+        const term = params.get('term') || '';
+        const sessionYear = params.get('sessionYear') || '';
+        const reports = document.getElementById('reports');
+        const status = document.getElementById('status');
+        if (sessionStorage.getItem('role') === 'teacher') {
+            document.getElementById('back-link').href = 'teacher-dashboard.html';
+            document.getElementById('back-link').textContent = 'Back to Teacher Page';
+        }
+
+        function gradeFor(total) {
+            if (total >= 70) return ['A', 'Excellent'];
+            if (total >= 60) return ['B', 'Very Good'];
+            if (total >= 50) return ['C', 'Good'];
+            if (total >= 45) return ['D', 'Credit'];
+            if (total >= 40) return ['E', 'Pass'];
+            return ['F', 'Needs Improvement'];
+        }
+
+        function addCell(row, value, tag = 'td') {
+            const cell = document.createElement(tag);
+            cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
+            row.appendChild(cell);
+            return cell;
+        }
+
+        function makeReport(learner, subjects, scoresByKey, commentsByLearner, classInfo, average, rank, scoredCount) {
+            const card = document.createElement('article');
+            card.className = 'report-card';
+            const school = document.createElement('div');
+            school.className = 'school-header';
+            const schoolName = document.createElement('h1');
+            schoolName.textContent = 'JASOLA MODEL SCHOOL';
+            const address = document.createElement('p');
+            address.textContent = 'ACADEMIC PERFORMANCE REPORT';
+            school.append(schoolName, address);
+            const title = document.createElement('h2');
+            title.className = 'report-title';
+            title.textContent = `${term} Report`;
+            card.append(school, title);
+
+            const details = document.createElement('div');
+            details.className = 'student-details';
+            [
+                ['Learner', `${learner.surname} ${learner.othername}`],
+                ['Admission No.', learner.admission_number || 'Not provided'],
+                ['Class', `${classInfo.class_name} - ${classInfo.section}${classInfo.stream ? ` (${classInfo.stream})` : ''}`],
+                ['Academic Session', sessionYear],
+                ['Class Teacher', [classInfo.teacher_surname, classInfo.teacher_othername].filter(Boolean).join(' ') || 'Not assigned'],
+                ['Position', rank ? `${rank}${rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'} of ${scoredCount}` : 'No scores']
+            ].forEach(([label, value]) => {
+                const field = document.createElement('div');
+                const strong = document.createElement('strong');
+                strong.textContent = `${label}: `;
+                field.append(strong, document.createTextNode(value));
+                details.appendChild(field);
+            });
+            card.appendChild(details);
+
+            const table = document.createElement('table');
+            const head = document.createElement('thead');
+            const header = document.createElement('tr');
+            ['Subject', 'CA1 /20', 'CA2 /20', 'Exam /60', 'Total /100', 'Percent', 'Grade', 'Remark'].forEach(label => addCell(header, label, 'th'));
+            head.appendChild(header);
+            table.appendChild(head);
+            const body = document.createElement('tbody');
+            const learnerScores = [];
+            subjects.forEach(subject => {
+                const score = scoresByKey.get(`${learner.id}:${subject.id}`);
+                const row = document.createElement('tr');
+                addCell(row, subject.stream ? `${subject.name} (${subject.stream})` : subject.name);
+                addCell(row, score && score.ca1);
+                addCell(row, score && score.ca2);
+                addCell(row, score && score.exam);
+                const total = score ? Number(score.ca1) + Number(score.ca2) + Number(score.exam) : null;
+                addCell(row, total === null ? null : total.toFixed(2));
+                addCell(row, total === null ? null : `${total.toFixed(2)}%`);
+                const grade = total === null ? null : gradeFor(total);
+                addCell(row, grade && grade[0]);
+                addCell(row, grade && grade[1]);
+                if (total !== null) learnerScores.push(total);
+                body.appendChild(row);
+            });
+            if (!subjects.length) {
+                const row = document.createElement('tr');
+                addCell(row, 'No subjects are allocated to this class.');
+                table.appendChild(head);
+                const emptyBody = document.createElement('tbody');
+                const emptyRow = document.createElement('tr');
+                const emptyCell = addCell(emptyRow, 'No subjects are allocated to this class.');
+                emptyCell.colSpan = 8;
+                emptyBody.appendChild(emptyRow);
+                table.appendChild(emptyBody);
+            } else {
+                table.appendChild(body);
+            }
+            card.appendChild(table);
+
+            const totalScore = learnerScores.reduce((sum, score) => sum + score, 0);
+            const mean = learnerScores.length ? totalScore / learnerScores.length : null;
+            const summary = document.createElement('div');
+            summary.className = 'summary';
+            [
+                ['Subjects with scores', `${learnerScores.length} / ${subjects.length}`],
+                ['Aggregate', learnerScores.length ? `${totalScore.toFixed(2)} / ${learnerScores.length * 100}` : '—'],
+                ['Average', mean === null ? '—' : `${mean.toFixed(2)}%`],
+                ['Overall grade', mean === null ? '—' : gradeFor(mean)[0]]
+            ].forEach(([label, value]) => {
+                const item = document.createElement('div');
+                const strong = document.createElement('strong');
+                strong.textContent = label;
+                item.append(strong, document.createTextNode(value));
+                summary.appendChild(item);
+            });
+            card.appendChild(summary);
+
+            const remark = document.createElement('p');
+            remark.className = 'remark';
+            const remarkLabel = document.createElement('strong');
+            remarkLabel.textContent = "Teacher's remark: ";
+            const remarkText = mean === null ? 'No scores recorded.' :
+                mean >= 70 ? 'Excellent performance. Keep it up.' :
+                mean >= 60 ? 'Very good performance. Keep working hard.' :
+                mean >= 50 ? 'Good effort. Continue to improve.' :
+                mean >= 40 ? 'Pass. More consistent study is encouraged.' :
+                'Needs improvement. Additional support and practice are recommended.';
+            remark.append(remarkLabel, document.createTextNode(remarkText));
+            card.appendChild(remark);
+
+            const principal = document.createElement('p');
+            principal.className = 'remark';
+            const adminComment = document.createElement('p');
+            adminComment.className = 'remark';
+            const adminLabel = document.createElement('strong');
+            adminLabel.textContent = "Administrator's comment: ";
+            adminComment.append(adminLabel, document.createTextNode(
+                commentsByLearner.get(learner.id) || 'No administrator comment.'
+            ));
+            card.appendChild(adminComment);
+
+            const principalLabel = document.createElement('strong');
+            principalLabel.textContent = "Principal's comment: ";
+            principal.append(principalLabel, document.createTextNode('____________________________________________'));
+            card.appendChild(principal);
+
+            const signatures = document.createElement('div');
+            signatures.className = 'signatures';
+            ['Class Teacher', 'Principal', 'Parent / Guardian'].forEach(label => {
+                const line = document.createElement('div');
+                line.textContent = `${label} Signature and Date`;
+                signatures.appendChild(line);
+            });
+            card.appendChild(signatures);
+
+            const key = document.createElement('p');
+            key.className = 'grade-key';
+            key.textContent = 'Grading: A 70–100 Excellent | B 60–69 Very Good | C 50–59 Good | D 45–49 Credit | E 40–44 Pass | F 0–39 Needs Improvement. Overall averages include subjects with recorded scores only.';
+            card.appendChild(key);
+            return { card, average: mean };
+        }
+
+        async function loadReports() {
+            if (!Number.isInteger(classId) || classId <= 0 || !term || !sessionYear) {
+                status.textContent = 'Invalid report selection. Return to the report-card page and select a class, term, and session.';
+                return;
+            }
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const query = new URLSearchParams({ classId: String(classId), term, sessionYear });
+                const response = await fetch(`${baseUrl}/api/report-cards?${query}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to prepare report cards.');
+                const scores = new Map(data.scores.map(score => [
+                    `${score.learner_id}:${score.subject_id}`, score
+                ]));
+                const commentsByLearner = new Map((data.comments || []).map(comment => [
+                    comment.learner_id, comment.comment
+                ]));
+                const summaries = data.learners.map(learner => {
+                    const totals = data.subjects
+                        .map(subject => scores.get(`${learner.id}:${subject.id}`))
+                        .filter(Boolean)
+                        .map(score => Number(score.ca1) + Number(score.ca2) + Number(score.exam));
+                    const average = totals.length
+                        ? totals.reduce((sum, total) => sum + total, 0) / totals.length
+                        : null;
+                    return { learner, average };
+                });
+                const ranked = summaries.filter(item => item.average !== null)
+                    .sort((left, right) => right.average - left.average);
+                reports.replaceChildren();
+                summaries.forEach(summary => {
+                    const rank = summary.average === null ? null :
+                        ranked.findIndex(item => item.average === summary.average) + 1;
+                    const report = makeReport(
+                        summary.learner, data.subjects, scores, commentsByLearner,
+                        data.class, summary.average,
+                        rank, ranked.length
+                    );
+                    reports.appendChild(report.card);
+                });
+                status.textContent = data.learners.length
+                    ? `${data.learners.length} report card(s) prepared for ${data.class.class_name} - ${data.class.section}. Use Print Report Cards to print.`
+                    : 'No learners are registered in this class.';
+            } catch (error) {
+                status.textContent = error.message || 'Unable to prepare report cards.';
+            }
+        }
+        loadReports();
+    </script>
+</body>
+</html>

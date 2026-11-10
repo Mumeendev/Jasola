@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submitted Results - Jasola Model School</title>
+    <style>
+        body { margin: 0; padding: 2rem; background: #f3f6fa; color: #1a202c; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        main { max-width: 1000px; margin: 2rem auto; padding: 2rem; background: #fff; border-radius: 10px; box-shadow: 0 4px 16px #00000012; }
+        header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+        nav { display: flex; gap: 1rem; }
+        a, button { color: #2c5282; }
+        button,.print-button { border: 0; border-radius: 5px; background: #2c5282; color: #fff; padding: .7rem 1rem; cursor: pointer; text-decoration:none; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: .8rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        th { background: #2c5282; color: #fff; }
+        #status { color: #4a5568; }
+        @page { size:A4 landscape; margin:10mm; }
+        @media print {
+            body { padding:0; background:#fff; }
+            main { max-width:none; margin:0; padding:0; box-shadow:none; }
+            nav,#status { display:none !important; }
+            table { font-size:9pt; }
+            th { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <h1>Submitted Results</h1>
+                <p>Saved result-submission records</p>
+            </div>
+            <nav>
+                <a id="dashboard-link" href="dashboard.html">Dashboard</a>
+                <a href="upload-result.html">Upload result</a>
+                <a class="print-button" href="report-cards.html">Print report cards</a>
+                <button type="button" onclick="loadResults()">Refresh</button>
+            </nav>
+        </header>
+        <p id="status" role="status">Loading results…</p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Class</th><th>Learner</th><th>Admission no.</th><th>Subject</th><th>Term</th><th>Session</th><th>CA1</th><th>CA2</th><th>Exam</th><th>Total</th></tr></thead>
+                <tbody id="results-list"></tbody>
+            </table>
+        </div>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        if (sessionStorage.getItem('role') === 'teacher') {
+            document.getElementById('dashboard-link').href = 'teacher-dashboard.html';
+        }
+
+        async function loadResults() {
+            const status = document.getElementById('status');
+            const list = document.getElementById('results-list');
+            status.textContent = 'Loading results…';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/results`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load results.');
+                list.replaceChildren();
+                data.forEach(result => {
+                    const row = document.createElement('tr');
+                    [
+                        result.class_name, result.learner_name, result.admission_number,
+                        result.subject, result.term, result.session_year,
+                        result.ca1, result.ca2, result.exam, result.total
+                    ].forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = value ?? '';
+                        row.appendChild(cell);
+                    });
+                    list.appendChild(row);
+                });
+                status.textContent = data.length ? `${data.length} result submission(s).` : 'No results have been submitted yet.';
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load results.';
+            }
+        }
+        loadResults();
+    </script>
+</body>
+</html>
