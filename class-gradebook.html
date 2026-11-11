@@ -12,6 +12,8 @@
         h1 { margin:.25rem 0; color:#1a365d; }
         .print-brand { display:none; align-items:center; justify-content:center; gap:1rem; text-align:center; border-bottom:2px solid #2c5282; margin-bottom:1.25rem; padding-bottom:.8rem; }
         .print-brand img { width:72px; height:72px; object-fit:contain; }
+        .print-brand p { margin:.2rem; color:#4a5568; }
+        .print-brand .school-levels { color:#2c5282; font-weight:700; letter-spacing:.08em; }
         .filters { justify-content:flex-start; margin:1rem 0; padding:1rem; background:#f7fafc; border-radius:6px; }
         label { display:grid; gap:.3rem; font-weight:600; }
         select,input { min-width:150px; padding:.65rem; border:1px solid #a0aec0; border-radius:4px; font:inherit; }
@@ -59,7 +61,12 @@
         </header>
         <div class="print-brand">
             <img src="images/WhatsApp%20Image%202026-11-11%20at%206.03.41%20PM.jpeg" alt="Jasola Model School logo">
-            <div><h1>JASOLA MODEL SCHOOL</h1><p>CLASS GRADEBOOK</p></div>
+            <div>
+                <h1>JASOLA MODEL SCHOOL</h1>
+                <p class="school-levels">CRECHE | BASIC COLLEGE</p>
+                <p>9A Temidire Street, Ganmo, Kwara State</p>
+                <p>CLASS GRADEBOOK</p>
+            </div>
         </div>
         <form class="filters" id="gradebook-form">
             <label>Class and section
@@ -87,7 +94,7 @@
         <p id="status" role="status">Results collate automatically from the saved scores for each allocated subject.</p>
         <p id="summary"></p>
         <p id="subject-progress"></p>
-        <p class="helper">Each subject shows the learner's total out of 100, percentage, and grade. Overall totals and rank use subjects with saved scores only; the completed-subject count shows what is still outstanding.</p>
+        <p class="helper">Each subject shows the learner's total out of 100, class position, and grade. Overall totals and rank use subjects with saved scores only; the completed-subject count shows what is still outstanding.</p>
         <div class="table-wrap">
             <table>
                 <thead id="gradebook-head"></thead>
@@ -118,6 +125,14 @@
             if (percent >= 45) return 'D';
             if (percent >= 40) return 'E';
             return 'F';
+        }
+
+        function ordinal(value) {
+            const remainder = value % 100;
+            const suffix = remainder >= 11 && remainder <= 13
+                ? 'th'
+                : value % 10 === 1 ? 'st' : value % 10 === 2 ? 'nd' : value % 10 === 3 ? 'rd' : 'th';
+            return `${value}${suffix}`;
         }
 
         function addCell(row, value, options = {}) {
@@ -175,6 +190,21 @@
                 const percentage = completed.length ? total / completed.length : null;
                 return { learner, subjectScores, completed: completed.length, total, percentage };
             });
+            const subjectRanks = subjects.map((subject, subjectIndex) => {
+                const ranked = summaries.filter(item => item.subjectScores[subjectIndex] !== null)
+                    .sort((left, right) =>
+                        right.subjectScores[subjectIndex] - left.subjectScores[subjectIndex]
+                    );
+                return new Map(ranked.map(item => [
+                    item.learner.id,
+                    {
+                        rank: ranked.findIndex(candidate =>
+                            candidate.subjectScores[subjectIndex] === item.subjectScores[subjectIndex]
+                        ) + 1,
+                        count: ranked.length
+                    }
+                ]));
+            });
             const ranked = summaries.filter(item => item.percentage !== null)
                 .sort((left, right) => right.percentage - left.percentage);
 
@@ -199,7 +229,7 @@
             ].forEach(([label, rowSpan]) => addCell(groupHeader, label.replace('<br>', ' '), { header: true, rowSpan }));
             const detailHeader = document.createElement('tr');
             subjects.forEach(() => {
-                ['Total /100', 'Percent', 'Grade'].forEach(label =>
+                ['Total /100', 'Position', 'Grade'].forEach(label =>
                     addCell(detailHeader, label, { header: true })
                 );
             });
@@ -210,9 +240,10 @@
                 addCell(row, index + 1);
                 addCell(row, `${summary.learner.surname} ${summary.learner.othername}`, { className: 'name' });
                 addCell(row, summary.learner.admission_number || '—');
-                summary.subjectScores.forEach(score => {
+                summary.subjectScores.forEach((score, subjectIndex) => {
                     addCell(row, score === null ? '—' : score.toFixed(2));
-                    addCell(row, score === null ? '—' : `${score.toFixed(2)}%`);
+                    const position = subjectRanks[subjectIndex].get(summary.learner.id);
+                    addCell(row, position ? `${ordinal(position.rank)} of ${position.count}` : '—');
                     addCell(row, score === null ? '—' : gradeFor(score));
                 });
                 const rank = summary.percentage === null
@@ -234,7 +265,7 @@
                     ? values.reduce((sum, score) => sum + score, 0) / values.length
                     : null;
                 addCell(averageRow, average === null ? '—' : average.toFixed(2));
-                addCell(averageRow, average === null ? '—' : `${average.toFixed(2)}%`);
+                addCell(averageRow, '—');
                 addCell(averageRow, average === null ? '—' : gradeFor(average));
             });
             const classPercentages = summaries.map(item => item.percentage).filter(value => value !== null);

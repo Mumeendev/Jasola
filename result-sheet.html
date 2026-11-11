@@ -12,6 +12,7 @@
         .school-logo { width:72px; height:72px; object-fit:contain; }
         .school-heading h1 { margin:.25rem; color:#1a365d; letter-spacing:.04em; }
         .school-heading p { margin:.2rem; color:#4a5568; }
+        .school-heading .school-levels { color:#2c5282; font-weight:700; letter-spacing:.08em; }
         header { display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
         #sheet-details { font-weight:600; color:#2d3748; }
         .table-wrap { overflow:auto; border:1px solid #a0aec0; }
@@ -61,6 +62,8 @@
             <img class="school-logo" src="images/WhatsApp%20Image%202026-11-11%20at%206.03.41%20PM.jpeg" alt="Jasola Model School logo">
             <div>
                 <h1>JASOLA MODEL SCHOOL</h1>
+                <p class="school-levels">CRECHE | BASIC COLLEGE</p>
+                <p>9A Temidire Street, Ganmo, Kwara State</p>
                 <p>Continuous Assessment and Examination Register</p>
             </div>
         </div>
@@ -86,7 +89,7 @@
             <div class="table-wrap">
                 <table>
                     <thead>
-                        <tr><th rowspan="2">No.</th><th rowspan="2">Learner name</th><th rowspan="2">Admission number</th><th>CA1</th><th>CA2</th><th>Exam</th><th rowspan="2">Total<br>/100</th><th rowspan="2">Percent</th><th rowspan="2">Grade</th></tr>
+                        <tr><th rowspan="2">No.</th><th rowspan="2">Learner name</th><th rowspan="2">Admission number</th><th>CA1</th><th>CA2</th><th>Exam</th><th rowspan="2">Total<br>/100</th><th rowspan="2">Position</th><th rowspan="2">Grade</th></tr>
                         <tr><th>/20</th><th>/20</th><th>/60</th></tr>
                     </thead>
                     <tbody id="learners"></tbody>
@@ -134,8 +137,8 @@
             const complete = inputs.every(input => input.value !== '') && values.every(Number.isFinite);
             const total = complete ? values.reduce((sum, score) => sum + score, 0) : null;
             row.querySelector('.total').textContent = total === null ? '—' : total.toFixed(2);
-            row.querySelector('.percentage').textContent = total === null ? '—' : `${total.toFixed(2)}%`;
             row.querySelector('.grade').textContent = total === null ? '—' : gradeFor(total);
+            updatePositions();
             updateClassAverage();
         }
 
@@ -146,6 +149,35 @@
             if (total >= 45) return 'D';
             if (total >= 40) return 'E';
             return 'F';
+        }
+
+        function ordinal(value) {
+            const remainder = value % 100;
+            const suffix = remainder >= 11 && remainder <= 13
+                ? 'th'
+                : value % 10 === 1 ? 'st' : value % 10 === 2 ? 'nd' : value % 10 === 3 ? 'rd' : 'th';
+            return `${value}${suffix}`;
+        }
+
+        function updatePositions() {
+            const rows = [...document.querySelectorAll('#learners tr')];
+            const scores = rows.map(row => ({
+                row,
+                total: row.querySelector('.total').textContent === '—'
+                    ? null
+                    : Number(row.querySelector('.total').textContent)
+            }));
+            const ranked = scores.filter(item => item.total !== null)
+                .sort((left, right) => right.total - left.total);
+            scores.forEach(item => {
+                const position = item.row.querySelector('.position');
+                if (item.total === null) {
+                    position.textContent = '—';
+                    return;
+                }
+                const rank = ranked.findIndex(candidate => candidate.total === item.total) + 1;
+                position.textContent = `${ordinal(rank)} of ${ranked.length}`;
+            });
         }
 
         function updateClassAverage() {
@@ -163,9 +195,7 @@
             cells[4].textContent = totals.length
                 ? (totals.reduce((sum, value) => sum + value, 0) / totals.length).toFixed(2)
                 : '—';
-            cells[5].textContent = totals.length
-                ? `${(totals.reduce((sum, value) => sum + value, 0) / totals.length).toFixed(2)}%`
-                : '—';
+            cells[5].textContent = '—';
             cells[6].textContent = totals.length
                 ? gradeFor(totals.reduce((sum, value) => sum + value, 0) / totals.length)
                 : '—';
@@ -225,19 +255,19 @@
                         ? Number(learner.ca1) + Number(learner.ca2) + Number(learner.exam)
                         : null;
                     totalCell.textContent = total === null ? '—' : total.toFixed(2);
-                    const percentageCell = document.createElement('td');
-                    percentageCell.className = 'percentage';
-                    percentageCell.textContent = total === null ? '—' : `${total.toFixed(2)}%`;
+                    const positionCell = document.createElement('td');
+                    positionCell.className = 'position';
                     const gradeCell = document.createElement('td');
                     gradeCell.className = 'grade';
                     gradeCell.textContent = total === null ? '—' : gradeFor(total);
-                    row.append(totalCell, percentageCell, gradeCell);
+                    row.append(totalCell, positionCell, gradeCell);
                     row.querySelectorAll('input').forEach(input =>
                         input.addEventListener('input', () => updateTotal(learner.learner_id))
                     );
                     body.appendChild(row);
                 });
                 updateClassAverage();
+                updatePositions();
                 learnerFilter.disabled = data.learners.length === 0;
                 status.textContent = data.learners.length
                     ? `${data.learners.length} learner(s) in this class. Choose one learner or enter scores for the whole class. Saved scores can be edited.`

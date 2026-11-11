@@ -15,6 +15,8 @@
         .school-header { text-align:center; border-bottom:3px double #1a365d; padding-bottom:.7rem; }
         .school-header h1 { margin:.2rem; color:#1a365d; font-size:22pt; letter-spacing:.06em; }
         .school-header p { margin:.2rem; font-size:10pt; color:#4a5568; }
+        .school-header .school-levels { font-weight:700; letter-spacing:.08em; color:#2c5282; }
+        .school-header .school-address { font-size:9pt; }
         .school-brand { display:flex; align-items:center; justify-content:center; gap:1rem; }
         .school-logo { width:82px; height:82px; object-fit:contain; }
         .report-title { margin:1rem 0; text-align:center; text-transform:uppercase; letter-spacing:.12em; }
@@ -24,7 +26,7 @@
         th,td { padding:.48rem; border:1px solid #718096; text-align:center; }
         th { background:#e2e8f0; }
         th:first-child,td:first-child { text-align:left; }
-        .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:1rem 0; }
+        .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; margin:1rem 0; }
         .summary div { padding:.65rem; border:1px solid #a0aec0; text-align:center; }
         .summary strong { display:block; margin-bottom:.2rem; font-size:9pt; }
         .remark { margin:.8rem 0; padding:.6rem; border:1px solid #a0aec0; min-height:2.5rem; }
@@ -34,6 +36,9 @@
         .signatures { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; margin-top:2rem; text-align:center; }
         .signatures div { padding-top:.45rem; border-top:1px solid #4a5568; font-size:9pt; }
         .grade-key { margin-top:1rem; color:#4a5568; font-size:8.5pt; }
+        .report-footer { display:grid; grid-template-columns:repeat(2,1fr); gap:.5rem; margin:.8rem 0; padding:.7rem; border:1px solid #a0aec0; background:#f7fafc; }
+        .report-footer h3 { grid-column:1/-1; margin:.1rem 0; font-size:10pt; }
+        .attendance-summary { margin:.8rem 0; }
         @page { size:A4 portrait; margin:10mm; }
         @media print {
             body { padding:0; background:#fff; }
@@ -72,6 +77,8 @@
         const sessionYear = params.get('sessionYear') || '';
         const learnerIdParam = params.get('learnerId');
         const learnerId = learnerIdParam === null ? null : Number(learnerIdParam);
+        const resumptionDate = params.get('resumptionDate') || '';
+        const schoolFees = params.get('schoolFees');
         const reports = document.getElementById('reports');
         const status = document.getElementById('status');
         if (learnerId !== null) {
@@ -91,6 +98,14 @@
             return ['F', 'Needs Improvement'];
         }
 
+        function ordinal(value) {
+            const remainder = value % 100;
+            const suffix = remainder >= 11 && remainder <= 13
+                ? 'th'
+                : value % 10 === 1 ? 'st' : value % 10 === 2 ? 'nd' : value % 10 === 3 ? 'rd' : 'th';
+            return `${value}${suffix}`;
+        }
+
         function addCell(row, value, tag = 'td') {
             const cell = document.createElement(tag);
             cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
@@ -99,7 +114,7 @@
         }
 
         function makeReport(learner, subjects, scoresByKey, commentsByLearner, behaviorsByLearner,
-            behaviorSkillNames, classInfo, average, rank, scoredCount) {
+            behaviorSkillGroups, attendanceByLearner, positionsBySubject, classInfo, rank, scoredCount) {
             const card = document.createElement('article');
             card.className = 'report-card';
             const school = document.createElement('div');
@@ -112,10 +127,16 @@
             logo.alt = 'Jasola Model School logo';
             const schoolName = document.createElement('h1');
             schoolName.textContent = 'JASOLA MODEL SCHOOL';
+            const schoolLevels = document.createElement('p');
+            schoolLevels.className = 'school-levels';
+            schoolLevels.textContent = 'CRECHE | BASIC COLLEGE';
             const address = document.createElement('p');
-            address.textContent = 'ACADEMIC PERFORMANCE REPORT';
+            address.className = 'school-address';
+            address.textContent = '9A Temidire Street, Ganmo, Kwara State';
+            const reportDescription = document.createElement('p');
+            reportDescription.textContent = 'ACADEMIC PERFORMANCE REPORT';
             brand.append(logo, schoolName);
-            school.append(brand, address);
+            school.append(brand, schoolLevels, address, reportDescription);
             const title = document.createElement('h2');
             title.className = 'report-title';
             title.textContent = `${term} Report`;
@@ -125,11 +146,10 @@
             details.className = 'student-details';
             [
                 ['Learner', `${learner.surname} ${learner.othername}`],
-                ['Admission No.', learner.admission_number || 'Not provided'],
                 ['Class', `${classInfo.class_name} - ${classInfo.section}${classInfo.stream ? ` (${classInfo.stream})` : ''}`],
                 ['Academic Session', sessionYear],
                 ['Class Teacher', [classInfo.teacher_surname, classInfo.teacher_othername].filter(Boolean).join(' ') || 'Not assigned'],
-                ['Position', rank ? `${rank}${rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'} of ${scoredCount}` : 'No scores']
+                ['Position', rank ? `${ordinal(rank)} of ${scoredCount}` : 'No scores']
             ].forEach(([label, value]) => {
                 const field = document.createElement('div');
                 const strong = document.createElement('strong');
@@ -142,7 +162,7 @@
             const table = document.createElement('table');
             const head = document.createElement('thead');
             const header = document.createElement('tr');
-            ['Subject', 'CA1 /20', 'CA2 /20', 'Exam /60', 'Total /100', 'Percent', 'Grade', 'Remark'].forEach(label => addCell(header, label, 'th'));
+            ['Subject', 'CA1 /20', 'CA2 /20', 'Exam /60', 'Total /100', 'Position', 'Grade', 'Remark'].forEach(label => addCell(header, label, 'th'));
             head.appendChild(header);
             table.appendChild(head);
             const body = document.createElement('tbody');
@@ -156,7 +176,8 @@
                 addCell(row, score && score.exam);
                 const total = score ? Number(score.ca1) + Number(score.ca2) + Number(score.exam) : null;
                 addCell(row, total === null ? null : total.toFixed(2));
-                addCell(row, total === null ? null : `${total.toFixed(2)}%`);
+                const subjectPosition = positionsBySubject.get(`${subject.id}:${learner.id}`);
+                addCell(row, subjectPosition ? `${ordinal(subjectPosition.rank)} of ${subjectPosition.count}` : null);
                 const grade = total === null ? null : gradeFor(total);
                 addCell(row, grade && grade[0]);
                 addCell(row, grade && grade[1]);
@@ -164,27 +185,38 @@
                 body.appendChild(row);
             });
             if (!subjects.length) {
-                const row = document.createElement('tr');
-                addCell(row, 'No subjects are allocated to this class.');
-                table.appendChild(head);
-                const emptyBody = document.createElement('tbody');
                 const emptyRow = document.createElement('tr');
                 const emptyCell = addCell(emptyRow, 'No subjects are allocated to this class.');
                 emptyCell.colSpan = 8;
-                emptyBody.appendChild(emptyRow);
-                table.appendChild(emptyBody);
-            } else {
-                table.appendChild(body);
+                body.appendChild(emptyRow);
             }
+            table.appendChild(body);
+            const foot = document.createElement('tfoot');
+            const obtainableRow = document.createElement('tr');
+            const obtainableLabel = addCell(obtainableRow, 'Marks Obtainable');
+            obtainableLabel.colSpan = 4;
+            addCell(obtainableRow, subjects.length ? (subjects.length * 100).toFixed(2) : '—');
+            addCell(obtainableRow, null);
+            addCell(obtainableRow, null);
+            addCell(obtainableRow, null);
+            const obtainedRow = document.createElement('tr');
+            const obtainedLabel = addCell(obtainedRow, 'Marks Obtained');
+            obtainedLabel.colSpan = 4;
+            addCell(obtainedRow, learnerScores.reduce((sum, score) => sum + score, 0).toFixed(2));
+            addCell(obtainedRow, null);
+            addCell(obtainedRow, null);
+            addCell(obtainedRow, null);
+            foot.append(obtainableRow, obtainedRow);
+            table.appendChild(foot);
             card.appendChild(table);
 
             const totalScore = learnerScores.reduce((sum, score) => sum + score, 0);
             const mean = learnerScores.length ? totalScore / learnerScores.length : null;
+            const totalObtainable = subjects.length * 100;
             const summary = document.createElement('div');
             summary.className = 'summary';
             [
-                ['Subjects with scores', `${learnerScores.length} / ${subjects.length}`],
-                ['Aggregate', learnerScores.length ? `${totalScore.toFixed(2)} / ${learnerScores.length * 100}` : '—'],
+                ['Total percentage', totalObtainable ? `${(totalScore / totalObtainable * 100).toFixed(2)}%` : '—'],
                 ['Average', mean === null ? '—' : `${mean.toFixed(2)}%`],
                 ['Overall grade', mean === null ? '—' : gradeFor(mean)[0]]
             ].forEach(([label, value]) => {
@@ -200,7 +232,7 @@
             const behaviorPanel = document.createElement('section');
             behaviorPanel.className = 'behavior-panel';
             const behaviorTitle = document.createElement('h3');
-            behaviorTitle.textContent = 'Behavioral Skills';
+            behaviorTitle.textContent = 'Affective & Psychomotor Traits';
             behaviorPanel.appendChild(behaviorTitle);
             const behaviorTable = document.createElement('table');
             const behaviorHead = document.createElement('thead');
@@ -210,15 +242,35 @@
             behaviorHead.appendChild(behaviorHeader);
             behaviorTable.appendChild(behaviorHead);
             const behaviorBody = document.createElement('tbody');
-            behaviorSkillNames.forEach(skill => {
-                const row = document.createElement('tr');
-                addCell(row, skill);
-                addCell(row, behaviorRatings[skill] || '—');
-                behaviorBody.appendChild(row);
+            behaviorSkillGroups.forEach(group => {
+                const groupRow = document.createElement('tr');
+                const groupCell = addCell(groupRow, group.category, 'th');
+                groupCell.colSpan = 2;
+                behaviorBody.appendChild(groupRow);
+                group.skills.forEach(skill => {
+                    const row = document.createElement('tr');
+                    addCell(row, skill);
+                    addCell(row, behaviorRatings[skill] || '—');
+                    behaviorBody.appendChild(row);
+                });
             });
             behaviorTable.append(behaviorBody);
             behaviorPanel.appendChild(behaviorTable);
             card.appendChild(behaviorPanel);
+
+            const attendance = attendanceByLearner.get(learner.id);
+            const attendanceSummary = document.createElement('p');
+            attendanceSummary.className = 'remark attendance-summary';
+            const attendanceLabel = document.createElement('strong');
+            attendanceLabel.textContent = 'Attendance: ';
+            const daysPresent = attendance ? Number(attendance.days_present) : null;
+            const daysSchoolOpen = attendance ? Number(attendance.days_school_open) : null;
+            attendanceSummary.append(attendanceLabel, document.createTextNode(
+                daysPresent === null || daysSchoolOpen === null
+                    ? 'Not recorded.'
+                    : `${daysPresent} day(s) present, ${daysSchoolOpen - daysPresent} day(s) absent out of ${daysSchoolOpen} school day(s).`
+            ));
+            card.appendChild(attendanceSummary);
 
             const comments = commentsByLearner.get(learner.id) || {};
             [
@@ -232,6 +284,36 @@
                 comment.append(heading, document.createTextNode(text));
                 card.appendChild(comment);
             });
+
+            if (resumptionDate || (schoolFees !== null && schoolFees !== '' &&
+                Number.isFinite(Number(schoolFees)))) {
+                const footer = document.createElement('section');
+                footer.className = 'report-footer';
+                const heading = document.createElement('h3');
+                heading.textContent = 'Next Term Details';
+                footer.appendChild(heading);
+                if (resumptionDate) {
+                    const resume = document.createElement('div');
+                    const resumeLabel = document.createElement('strong');
+                    resumeLabel.textContent = 'School resumes: ';
+                    resume.append(resumeLabel, document.createTextNode(
+                        new Date(`${resumptionDate}T00:00:00`).toLocaleDateString('en-NG', {
+                            day: 'numeric', month: 'long', year: 'numeric'
+                        })
+                    ));
+                    footer.appendChild(resume);
+                }
+                if (schoolFees !== null && schoolFees !== '' && Number.isFinite(Number(schoolFees))) {
+                    const fee = document.createElement('div');
+                    const feeLabel = document.createElement('strong');
+                    feeLabel.textContent = 'School fees: ';
+                    fee.append(feeLabel, document.createTextNode(
+                        `NGN ${Number(schoolFees).toLocaleString('en-NG')}`
+                    ));
+                    footer.appendChild(fee);
+                }
+                card.appendChild(footer);
+            }
 
             const signatures = document.createElement('div');
             signatures.className = 'signatures';
@@ -277,6 +359,26 @@
                 const behaviorsByLearner = new Map((data.behaviors || []).map(behavior => [
                     behavior.learner_id, behavior.ratings
                 ]));
+                const attendanceByLearner = new Map((data.attendance || []).map(attendance => [
+                    attendance.learner_id, attendance
+                ]));
+                const positionsBySubject = new Map();
+                data.subjects.forEach(subject => {
+                    const rankedScores = data.learners.map(learner => {
+                        const score = scores.get(`${learner.id}:${subject.id}`);
+                        return score ? {
+                            learnerId: learner.id,
+                            total: Number(score.ca1) + Number(score.ca2) + Number(score.exam)
+                        } : null;
+                    }).filter(Boolean).sort((left, right) => right.total - left.total);
+                    rankedScores.forEach((item, index) => {
+                        const rank = rankedScores.findIndex(candidate => candidate.total === item.total) + 1;
+                        positionsBySubject.set(`${subject.id}:${item.learnerId}`, {
+                            rank,
+                            count: rankedScores.length
+                        });
+                    });
+                });
                 const allSummaries = data.learners.map(learner => {
                     const totals = data.subjects
                         .map(subject => scores.get(`${learner.id}:${subject.id}`))
@@ -298,8 +400,8 @@
                         ranked.findIndex(item => item.average === summary.average) + 1;
                     const report = makeReport(
                         summary.learner, data.subjects, scores, commentsByLearner,
-                        behaviorsByLearner, data.behaviorSkills || [],
-                        data.class, summary.average,
+                        behaviorsByLearner, data.behaviorSkillGroups || [],
+                        attendanceByLearner, positionsBySubject, data.class,
                         rank, ranked.length
                     );
                     reports.appendChild(report.card);

@@ -139,7 +139,17 @@ function teacherUsernameFromOthername(othername) {
 }
 
 const subjectStreams = new Set(['Science', 'Arts', 'Commercial']);
-const behaviorSkills = ['Attentiveness', 'Punctuality', 'Neatness', 'Leadership'];
+const behaviorSkillGroups = [
+  {
+    category: 'Affective Traits',
+    skills: ['Attentiveness', 'Punctuality', 'Neatness', 'Leadership']
+  },
+  {
+    category: 'Psychomotor Traits',
+    skills: ['Handwriting', 'Drawing', 'Sports', 'Manual Skills']
+  }
+];
+const behaviorSkills = behaviorSkillGroups.flatMap((group) => group.skills);
 const behaviorRatings = new Set(['Excellent', 'Very Good', 'Good', 'Fair', 'Poor']);
 
 async function initializeDatabase() {
@@ -282,6 +292,18 @@ async function initializeDatabase() {
         term VARCHAR(50) NOT NULL,
         session_year VARCHAR(50) NOT NULL,
         ratings JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, class_id, term, session_year)
+      );
+      CREATE TABLE IF NOT EXISTS learner_attendance (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        days_school_open INTEGER NOT NULL CHECK (days_school_open >= 0),
+        days_present INTEGER NOT NULL CHECK (days_present >= 0 AND days_present <= days_school_open),
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, class_id, term, session_year)
@@ -1078,6 +1100,12 @@ app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) =
        WHERE class_id = $1 AND term = $2 AND session_year = $3`,
       [classId, term.trim(), sessionYear.trim()]
     );
+    const attendanceResult = await pool.query(
+      `SELECT learner_id, days_school_open, days_present
+       FROM learner_attendance
+       WHERE class_id = $1 AND term = $2 AND session_year = $3`,
+      [classId, term.trim(), sessionYear.trim()]
+    );
     const allowedSubjects = subjectsResult.rows.filter((subject) =>
       isSubjectAllowedForClass(subject, classResult.rows[0])
     );
@@ -1089,7 +1117,9 @@ app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) =
       scores: scoresResult.rows.filter((score) => allowedSubjectIds.has(score.subject_id)),
       comments: commentsResult.rows,
       behaviors: behaviorsResult.rows,
-      behaviorSkills
+      behaviorSkills,
+      behaviorSkillGroups,
+      attendance: attendanceResult.rows
     });
   } catch (err) {
     console.error('Loading report cards failed:', err);
@@ -1248,7 +1278,7 @@ app.get('/api/learner-behaviors', requireRole('admin', 'teacher'), async (req, r
        ORDER BY l.surname, l.othername`,
       [classId, term.trim(), sessionYear.trim()]
     );
-    res.json({ skills: behaviorSkills, learners: result.rows });
+    res.json({ skills: behaviorSkills, skillGroups: behaviorSkillGroups, learners: result.rows });
   } catch (err) {
     console.error('Loading learner behavioral skills failed:', err);
     res.status(500).json({ error: 'Unable to load behavioral skills.' });
@@ -1330,6 +1360,125 @@ app.put('/api/learner-behaviors', requireRole('admin', 'teacher'), async (req, r
     await client.query('ROLLBACK');
     console.error('Saving learner behavioral skills failed:', err);
     res.status(500).json({ error: 'Unable to save behavioral skills.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/learner-attendance', requireRole('admin', 'teacher'), async (req, res) => {
+  const classId = Number(req.query.classId);
+  const { term, sessionYear } = req.query;
+  if (!Number.isInteger(classId) || classId <= 0 ||
+      typeof term !== 'string' || !term.trim() ||
+      typeof sessionYear !== 'string' || !sessionYear.trim()) {
+    return res.status(400).json({ error: 'Select a class, term, and session.' });
+  }
+  try {
+    if (req.user.role === 'teacher') {
+      const allocation = await pool.query(
+        'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
+        [req.user.username, classId]
+      );
+      if (!allocation.rows.length) return res.status(403).json({ error: 'You are not assigned to this class.' });
+    }
+    const classExists = await pool.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
+    if (!classExists.rows.length) return res.status(404).json({ error: 'Class not found.' });
+    const result = await pool.query(
+      `SELECT l.id AS learner_id, l.surname, l.othername, l.admission_number,
+              COALESCE(la.days_school_open, 0) AS days_school_open,
+              COALESCE(la.days_present, 0) AS days_present
+       FROM learners l
+       LEFT JOIN learner_attendance la
+         ON la.learner_id = l.id AND la.class_id = $1 AND la.term = $2 AND la.session_year = $3
+       WHERE l.class_id = $1
+       ORDER BY l.surname, l.othername`,
+      [classId, term.trim(), sessionYear.trim()]
+    );
+    res.json({
+      daysSchoolOpen: result.rows.length ? result.rows[0].days_school_open : 0,
+      learners: result.rows
+    });
+  } catch (err) {
+    console.error('Loading learner attendance failed:', err);
+    res.status(500).json({ error: 'Unable to load learner attendance.' });
+  }
+});
+
+app.put('/api/learner-attendance', requireRole('admin', 'teacher'), async (req, res) => {
+  const classId = Number(req.body.classId);
+  const { term, sessionYear, learners } = req.body;
+  const daysSchoolOpen = Number(req.body.daysSchoolOpen);
+  if (!Number.isInteger(classId) || classId <= 0 ||
+      typeof term !== 'string' || !term.trim() ||
+      typeof sessionYear !== 'string' || !sessionYear.trim() ||
+      !(typeof req.body.daysSchoolOpen === 'number' ||
+        (typeof req.body.daysSchoolOpen === 'string' && req.body.daysSchoolOpen.trim() !== '')) ||
+      !Number.isInteger(daysSchoolOpen) || daysSchoolOpen < 0 ||
+      !Array.isArray(learners) ||
+      learners.some((item) => !item || typeof item !== 'object' ||
+        !Number.isInteger(Number(item.learnerId)) || Number(item.learnerId) <= 0 ||
+        !(typeof item.daysPresent === 'number' ||
+          (typeof item.daysPresent === 'string' && item.daysPresent.trim() !== '')) ||
+        !Number.isInteger(Number(item.daysPresent)) ||
+        Number(item.daysPresent) < 0 || Number(item.daysPresent) > daysSchoolOpen)) {
+    return res.status(400).json({ error: 'Enter valid school days and attendance for every learner.' });
+  }
+  const rows = learners.map((item) => ({
+    learnerId: Number(item.learnerId),
+    daysPresent: Number(item.daysPresent)
+  }));
+  if (new Set(rows.map((item) => item.learnerId)).size !== rows.length) {
+    return res.status(400).json({ error: 'A learner appears more than once in the attendance list.' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const classExists = await client.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
+    if (!classExists.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+    if (req.user.role === 'teacher') {
+      const allocation = await client.query(
+        'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
+        [req.user.username, classId]
+      );
+      if (!allocation.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'You are not assigned to this class.' });
+      }
+    }
+    const classLearners = await client.query('SELECT id FROM learners WHERE class_id = $1', [classId]);
+    const learnerIds = new Set(classLearners.rows.map((learner) => learner.id));
+    if (rows.some((row) => !learnerIds.has(row.learnerId))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Every learner must belong to the selected class.' });
+    }
+    for (const row of rows) {
+      await client.query(
+        `INSERT INTO learner_attendance
+           (learner_id, class_id, term, session_year, days_school_open, days_present, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (learner_id, class_id, term, session_year)
+         DO UPDATE SET days_school_open = EXCLUDED.days_school_open,
+           days_present = EXCLUDED.days_present, updated_by = EXCLUDED.updated_by,
+           updated_at = NOW()`,
+        [row.learnerId, classId, term.trim(), sessionYear.trim(),
+          daysSchoolOpen, row.daysPresent, req.user.username]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, saved: rows.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Saving learner attendance failed:', err);
+    res.status(500).json({ error: 'Unable to save learner attendance.' });
   } finally {
     client.release();
   }

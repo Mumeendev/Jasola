@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Behavioral Skills - Jasola Model School</title>
+    <title>Behavioral Traits &amp; Attendance - Jasola Model School</title>
     <style>
         * { box-sizing:border-box; }
         body { margin:0; min-height:100vh; padding:2rem; background:#edf2f7; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
@@ -20,13 +20,20 @@
         .ratings { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.8rem; }
         .ratings label { font-size:.95rem; }
         .ratings select { width:100%; min-width:0; }
+        .trait-group { margin:1rem 0; padding:1rem; border:1px solid #e2e8f0; border-radius:6px; }
+        .trait-group h3 { margin:.1rem 0 .75rem; color:#2c5282; }
+        .attendance-row { display:grid; grid-template-columns:minmax(180px,1fr) repeat(2,minmax(120px,.5fr)); gap:.75rem; align-items:center; }
+        .attendance-row input { width:100%; min-width:0; }
+        .attendance-row strong { text-align:center; }
+        .attendance-heading { margin:1.25rem 0 .5rem; font-weight:700; }
+        #attendance-panel[hidden] { display:none; }
     </style>
     <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
     <main>
         <header>
-            <div><h1>Behavioral Skills</h1><p>Choose ratings for each learner in the selected class, term, and session.</p></div>
+            <div><h1>Behavioral Traits &amp; Attendance</h1><p>Record affective and psychomotor traits or term attendance for the selected class.</p></div>
             <div class="toolbar">
                 <a class="button" id="back-link" href="more-options.html">More Options</a>
                 <a class="button" href="report-cards.html">Report Cards</a>
@@ -54,10 +61,22 @@
                 </datalist>
             </label>
             <button type="submit" id="load-button">Load Learners</button>
+            <button type="button" id="attendance-button">Attendance</button>
         </form>
         <p id="status" role="status"></p>
         <section id="learners"></section>
         <button type="button" id="save-button" hidden>Save Behavioral Ratings</button>
+        <section id="attendance-panel" hidden>
+            <h2>Class Attendance</h2>
+            <label>Days school was open this term
+                <input id="days-school-open" type="number" min="0" step="1" required>
+            </label>
+            <div class="attendance-heading attendance-row">
+                <span>Learner</span><span>Days present</span><span>Days absent</span>
+            </div>
+            <div id="attendance-learners"></div>
+            <button type="button" id="save-attendance-button">Save Attendance</button>
+        </section>
     </main>
     <script src="auth.js"></script>
     <script>
@@ -65,7 +84,10 @@
         const learnerList = document.getElementById('learners');
         const status = document.getElementById('status');
         const saveButton = document.getElementById('save-button');
+        const attendancePanel = document.getElementById('attendance-panel');
+        const attendanceLearners = document.getElementById('attendance-learners');
         let skills = [];
+        let skillGroups = [];
 
         if (sessionStorage.getItem('role') === 'teacher') {
             document.getElementById('back-link').href = 'teacher-dashboard.html';
@@ -94,6 +116,7 @@
             if (!event.target.reportValidity()) return;
             learnerList.replaceChildren();
             saveButton.hidden = true;
+            attendancePanel.hidden = true;
             status.textContent = 'Loading behavioral ratings...';
             try {
                 const baseUrl = await window.resolvePortalApiBase();
@@ -106,6 +129,7 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Unable to load behavioral ratings.');
                 skills = data.skills;
+                skillGroups = data.skillGroups || [{ category: 'Behavioral Traits', skills }];
                 data.learners.forEach(learner => {
                     const card = document.createElement('article');
                     card.className = 'learner';
@@ -113,22 +137,30 @@
                     const heading = document.createElement('h2');
                     heading.textContent = `${learner.surname} ${learner.othername}` +
                         (learner.admission_number ? ` (${learner.admission_number})` : '');
-                    const ratings = document.createElement('div');
-                    ratings.className = 'ratings';
-                    skills.forEach(skill => {
-                        const label = document.createElement('label');
-                        label.textContent = skill;
-                        const select = document.createElement('select');
-                        select.dataset.skill = skill;
-                        select.add(new Option('Not rated', ''));
-                        ['Excellent', 'Very Good', 'Good', 'Fair', 'Poor'].forEach(rating =>
-                            select.add(new Option(rating, rating))
-                        );
-                        select.value = learner.ratings[skill] || '';
-                        label.appendChild(select);
-                        ratings.appendChild(label);
+                    skillGroups.forEach(group => {
+                        const section = document.createElement('section');
+                        section.className = 'trait-group';
+                        const title = document.createElement('h3');
+                        title.textContent = group.category;
+                        const ratings = document.createElement('div');
+                        ratings.className = 'ratings';
+                        group.skills.forEach(skill => {
+                            const label = document.createElement('label');
+                            label.textContent = skill;
+                            const select = document.createElement('select');
+                            select.dataset.skill = skill;
+                            select.add(new Option('Not rated', ''));
+                            ['Excellent', 'Very Good', 'Good', 'Fair', 'Poor'].forEach(rating =>
+                                select.add(new Option(rating, rating))
+                            );
+                            select.value = learner.ratings[skill] || '';
+                            label.appendChild(select);
+                            ratings.appendChild(label);
+                        });
+                        section.append(title, ratings);
+                        card.appendChild(section);
                     });
-                    card.append(heading, ratings);
+                    card.prepend(heading);
                     learnerList.appendChild(card);
                 });
                 saveButton.hidden = !data.learners.length;
@@ -137,6 +169,113 @@
                     : 'No learners are registered in this class.';
             } catch (error) {
                 status.textContent = error.message || 'Unable to load behavioral ratings.';
+            }
+        });
+
+        document.getElementById('attendance-button').addEventListener('click', async () => {
+            if (!document.getElementById('behavior-form').reportValidity()) return;
+            learnerList.replaceChildren();
+            saveButton.hidden = true;
+            attendancePanel.hidden = true;
+            status.textContent = 'Loading attendance...';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const query = new URLSearchParams({
+                    classId: classSelect.value,
+                    term: document.getElementById('term').value,
+                    sessionYear: document.getElementById('session').value.trim()
+                });
+                const response = await fetch(`${baseUrl}/api/learner-attendance?${query}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load attendance.');
+                document.getElementById('days-school-open').value = data.daysSchoolOpen;
+                attendanceLearners.replaceChildren();
+                data.learners.forEach(learner => {
+                    const row = document.createElement('div');
+                    row.className = 'learner attendance-row';
+                    row.dataset.learnerId = String(learner.learner_id);
+                    const name = document.createElement('span');
+                    name.textContent = `${learner.surname} ${learner.othername}`;
+                    const present = document.createElement('input');
+                    present.type = 'number';
+                    present.min = '0';
+                    present.step = '1';
+                    present.required = true;
+                    present.value = learner.days_present;
+                    present.dataset.daysPresent = '';
+                    present.setAttribute('aria-label', `Days present for ${name.textContent}`);
+                    const absent = document.createElement('strong');
+                    absent.textContent = String(Math.max(0, data.daysSchoolOpen - learner.days_present));
+                    present.addEventListener('input', () => {
+                        const totalDays = Number(document.getElementById('days-school-open').value);
+                        const presentDays = Number(present.value);
+                        absent.textContent = Number.isInteger(totalDays) && Number.isInteger(presentDays)
+                            ? String(Math.max(0, totalDays - presentDays))
+                            : '—';
+                    });
+                    row.append(name, present, absent);
+                    attendanceLearners.appendChild(row);
+                });
+                attendancePanel.hidden = false;
+                learnerList.appendChild(attendancePanel);
+                document.getElementById('save-attendance-button').disabled = !data.learners.length;
+                status.textContent = data.learners.length
+                    ? `${data.learners.length} learner(s) loaded. Days absent are calculated from days school was open.`
+                    : 'No learners are registered in this class.';
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load attendance.';
+            }
+        });
+
+        document.getElementById('days-school-open').addEventListener('input', () => {
+            const totalDays = Number(document.getElementById('days-school-open').value);
+            attendanceLearners.querySelectorAll('[data-days-present]').forEach(present => {
+                const absent = present.parentElement.querySelector('strong');
+                const presentDays = Number(present.value);
+                absent.textContent = Number.isInteger(totalDays) && Number.isInteger(presentDays)
+                    ? String(Math.max(0, totalDays - presentDays))
+                    : '—';
+            });
+        });
+
+        document.getElementById('save-attendance-button').addEventListener('click', async () => {
+            const totalDays = document.getElementById('days-school-open');
+            if (!totalDays.checkValidity()) {
+                totalDays.reportValidity();
+                return;
+            }
+            const learners = [...attendanceLearners.querySelectorAll('.attendance-row')].map(row => ({
+                learnerId: Number(row.dataset.learnerId),
+                daysPresent: Number(row.querySelector('[data-days-present]').value)
+            }));
+            const invalid = learners.some(row => !Number.isInteger(row.daysPresent) ||
+                row.daysPresent < 0 || row.daysPresent > Number(totalDays.value));
+            if (invalid) {
+                status.textContent = 'Days present must be a whole number between zero and days school was open.';
+                return;
+            }
+            const button = document.getElementById('save-attendance-button');
+            button.disabled = true;
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/learner-attendance`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        classId: Number(classSelect.value),
+                        term: document.getElementById('term').value,
+                        sessionYear: document.getElementById('session').value.trim(),
+                        daysSchoolOpen: Number(totalDays.value),
+                        learners
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to save attendance.');
+                status.textContent = `Saved attendance for ${data.saved} learner(s).`;
+            } catch (error) {
+                status.textContent = error.message || 'Unable to save attendance.';
+            } finally {
+                button.disabled = false;
             }
         });
 

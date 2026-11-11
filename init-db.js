@@ -181,6 +181,18 @@ async function init() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, class_id, term, session_year)
       );
+      CREATE TABLE IF NOT EXISTS learner_attendance (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        days_school_open INTEGER NOT NULL CHECK (days_school_open >= 0),
+        days_present INTEGER NOT NULL CHECK (days_present >= 0 AND days_present <= days_school_open),
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, class_id, term, session_year)
+      );
     `);
     console.log('Allocations table created or exists.');
 

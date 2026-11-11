@@ -23,6 +23,8 @@
         .comment-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,3fr); gap:.75rem; align-items:start; padding:.75rem 0; border-bottom:1px solid #e2e8f0; }
         .comment-row textarea { width:100%; min-height:70px; padding:.65rem; border:1px solid #cbd5e0; border-radius:5px; font:inherit; }
         .comment-name { font-weight:600; }
+        #term-details-panel { margin-top:1rem; padding:1rem; border:1px solid #cbd5e0; border-radius:6px; }
+        #term-details-panel[hidden] { display:none; }
         @media (max-width:640px) { .comment-row { grid-template-columns:1fr; } }
     </style>
     <link rel="stylesheet" href="responsive.css">
@@ -51,8 +53,16 @@
             </datalist>
             <button type="submit" id="show-learners-button">Show Learners</button>
             <button type="button" id="load-comments-button">Principal Comments</button>
+            <button type="button" id="term-details-button" aria-expanded="false">Add resumption date &amp; school fees</button>
             <a class="button" id="back-link" href="dashboard.html">Back to Dashboard</a>
         </form>
+        <section id="term-details-panel" hidden>
+            <h2>Next Term Details</h2>
+            <label for="resumption-date">School resumes on</label>
+            <input id="resumption-date" type="date">
+            <label for="school-fees">School fees (NGN)</label>
+            <input id="school-fees" type="number" min="0" step="0.01" placeholder="e.g. 25000">
+        </section>
         <p id="status" role="status"></p>
         <section id="learner-picker" hidden>
             <h2>Select a learner</h2>
@@ -127,6 +137,10 @@
                             sessionYear,
                             learnerId: String(learner.id)
                         });
+                        const resumptionDate = document.getElementById('resumption-date').value;
+                        const schoolFees = document.getElementById('school-fees').value;
+                        if (resumptionDate) reportQuery.set('resumptionDate', resumptionDate);
+                        if (schoolFees) reportQuery.set('schoolFees', schoolFees);
                         window.location.href = `report-book.html?${reportQuery}`;
                     });
                     learnerList.appendChild(button);
@@ -188,6 +202,11 @@
         }
 
         document.getElementById('load-comments-button').addEventListener('click', loadLearnerComments);
+        document.getElementById('term-details-button').addEventListener('click', event => {
+            const panel = document.getElementById('term-details-panel');
+            panel.hidden = !panel.hidden;
+            event.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+        });
         document.getElementById('save-comments-button').addEventListener('click', async () => {
             const button = document.getElementById('save-comments-button');
             button.disabled = true;
