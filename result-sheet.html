@@ -93,7 +93,10 @@
                         <tr><th>/20</th><th>/20</th><th>/60</th></tr>
                     </thead>
                     <tbody id="learners"></tbody>
-                    <tfoot><tr id="class-average"><td colspan="3">Class average</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr></tfoot>
+                    <tfoot>
+                        <tr id="class-highest"><td colspan="3">Highest</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+                        <tr id="class-lowest"><td colspan="3">Lowest</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+                    </tfoot>
                 </table>
             </div>
             <div class="actions" style="margin-top:1rem;">
@@ -134,12 +137,13 @@
                 Number(row.querySelector(`[name="${name}"]`).value)
             );
             const inputs = ['ca1', 'ca2', 'exam'].map(name => row.querySelector(`[name="${name}"]`));
-            const complete = inputs.every(input => input.value !== '') && values.every(Number.isFinite);
+            const complete = inputs.every(input => input.value !== '' && input.checkValidity()) &&
+                values.every(Number.isFinite);
             const total = complete ? values.reduce((sum, score) => sum + score, 0) : null;
             row.querySelector('.total').textContent = total === null ? '—' : total.toFixed(2);
             row.querySelector('.grade').textContent = total === null ? '—' : gradeFor(total);
             updatePositions();
-            updateClassAverage();
+            updateClassExtremes();
         }
 
         function gradeFor(total) {
@@ -180,25 +184,29 @@
             });
         }
 
-        function updateClassAverage() {
-            const rows = [...document.querySelectorAll('#learners tr:not([hidden])')];
-            const cells = document.querySelectorAll('#class-average td');
-            ['ca1', 'ca2', 'exam'].forEach((name, index) => {
-                const values = rows.map(row => row.querySelector(`[name="${name}"]`).value)
-                    .filter(value => value !== '').map(Number);
-                cells[index + 1].textContent = values.length
-                    ? (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)
-                    : '—';
+        function updateClassExtremes() {
+            const rows = [...document.querySelectorAll('#learners tr')];
+            [
+                ['class-highest', 'Highest', Math.max],
+                ['class-lowest', 'Lowest', Math.min]
+            ].forEach(([rowId, label, selectExtreme]) => {
+                const cells = document.querySelectorAll(`#${rowId} td`);
+                cells[0].textContent = label;
+                ['ca1', 'ca2', 'exam'].forEach((name, index) => {
+                    const values = rows.map(row => row.querySelector(`[name="${name}"]`))
+                        .filter(input => input.value !== '' && input.checkValidity())
+                        .map(input => Number(input.value));
+                    cells[index + 1].textContent = values.length
+                        ? selectExtreme(...values).toFixed(2)
+                        : '—';
+                });
+                const totals = rows.map(row => row.querySelector('.total').textContent)
+                    .filter(value => value !== '—').map(Number);
+                const total = totals.length ? selectExtreme(...totals) : null;
+                cells[4].textContent = total === null ? '—' : total.toFixed(2);
+                cells[5].textContent = '—';
+                cells[6].textContent = total === null ? '—' : gradeFor(total);
             });
-            const totals = rows.map(row => row.querySelector('.total').textContent)
-                .filter(value => value !== '—').map(Number);
-            cells[4].textContent = totals.length
-                ? (totals.reduce((sum, value) => sum + value, 0) / totals.length).toFixed(2)
-                : '—';
-            cells[5].textContent = '—';
-            cells[6].textContent = totals.length
-                ? gradeFor(totals.reduce((sum, value) => sum + value, 0) / totals.length)
-                : '—';
         }
 
         async function loadSheet() {
@@ -266,7 +274,7 @@
                     );
                     body.appendChild(row);
                 });
-                updateClassAverage();
+                updateClassExtremes();
                 updatePositions();
                 learnerFilter.disabled = data.learners.length === 0;
                 status.textContent = data.learners.length
@@ -335,7 +343,7 @@
             document.querySelectorAll('#learners tr').forEach(row => {
                 row.hidden = Boolean(selectedLearner) && row.dataset.learnerId !== selectedLearner;
             });
-            updateClassAverage();
+            updateClassExtremes();
         });
         loadSheet();
     </script>

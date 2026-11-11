@@ -26,7 +26,7 @@
         th,td { padding:.48rem; border:1px solid #718096; text-align:center; }
         th { background:#e2e8f0; }
         th:first-child,td:first-child { text-align:left; }
-        .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; margin:1rem 0; }
+        .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:1rem 0; }
         .summary div { padding:.65rem; border:1px solid #a0aec0; text-align:center; }
         .summary strong { display:block; margin-bottom:.2rem; font-size:9pt; }
         .remark { margin:.8rem 0; padding:.6rem; border:1px solid #a0aec0; min-height:2.5rem; }
@@ -114,7 +114,8 @@
         }
 
         function makeReport(learner, subjects, scoresByKey, commentsByLearner, behaviorsByLearner,
-            behaviorSkillGroups, attendanceByLearner, positionsBySubject, classInfo, rank, scoredCount) {
+            behaviorSkillGroups, attendanceByLearner, positionsBySubject, classInfo, rank, scoredCount,
+            classHighest, classLowest) {
             const card = document.createElement('article');
             card.className = 'report-card';
             const school = document.createElement('div');
@@ -148,7 +149,6 @@
                 ['Learner', `${learner.surname} ${learner.othername}`],
                 ['Class', `${classInfo.class_name} - ${classInfo.section}${classInfo.stream ? ` (${classInfo.stream})` : ''}`],
                 ['Academic Session', sessionYear],
-                ['Class Teacher', [classInfo.teacher_surname, classInfo.teacher_othername].filter(Boolean).join(' ') || 'Not assigned'],
                 ['Position', rank ? `${ordinal(rank)} of ${scoredCount}` : 'No scores']
             ].forEach(([label, value]) => {
                 const field = document.createElement('div');
@@ -217,7 +217,8 @@
             summary.className = 'summary';
             [
                 ['Total percentage', totalObtainable ? `${(totalScore / totalObtainable * 100).toFixed(2)}%` : '—'],
-                ['Average', mean === null ? '—' : `${mean.toFixed(2)}%`],
+                ['Class highest', classHighest === null ? '—' : `${classHighest.toFixed(2)}%`],
+                ['Class lowest', classLowest === null ? '—' : `${classLowest.toFixed(2)}%`],
                 ['Overall grade', mean === null ? '—' : gradeFor(mean)[0]]
             ].forEach(([label, value]) => {
                 const item = document.createElement('div');
@@ -402,7 +403,9 @@
                         summary.learner, data.subjects, scores, commentsByLearner,
                         behaviorsByLearner, data.behaviorSkillGroups || [],
                         attendanceByLearner, positionsBySubject, data.class,
-                        rank, ranked.length
+                        rank, ranked.length,
+                        ranked.length ? ranked[0].average : null,
+                        ranked.length ? ranked[ranked.length - 1].average : null
                     );
                     reports.appendChild(report.card);
                 });

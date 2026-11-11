@@ -257,27 +257,29 @@
                 body.appendChild(row);
             });
 
-            const averageRow = document.createElement('tr');
-            addCell(averageRow, 'Class average', { colSpan: 3 });
-            subjects.forEach((subject, subjectIndex) => {
-                const values = summaries.map(item => item.subjectScores[subjectIndex]).filter(score => score !== null);
-                const average = values.length
-                    ? values.reduce((sum, score) => sum + score, 0) / values.length
-                    : null;
-                addCell(averageRow, average === null ? '—' : average.toFixed(2));
-                addCell(averageRow, '—');
-                addCell(averageRow, average === null ? '—' : gradeFor(average));
+            [
+                ['Highest', Math.max, ranked[0]],
+                ['Lowest', Math.min, ranked[ranked.length - 1]]
+            ].forEach(([label, selectExtreme, overallLearner]) => {
+                const row = document.createElement('tr');
+                addCell(row, label, { colSpan: 3 });
+                subjects.forEach((subject, subjectIndex) => {
+                    const values = summaries.map(item => item.subjectScores[subjectIndex])
+                        .filter(score => score !== null);
+                    const extreme = values.length ? selectExtreme(...values) : null;
+                    addCell(row, extreme === null ? '—' : extreme.toFixed(2));
+                    addCell(row, '—');
+                    addCell(row, extreme === null ? '—' : gradeFor(extreme));
+                });
+                addCell(row, overallLearner
+                    ? `${overallLearner.total.toFixed(2)} / ${overallLearner.completed * 100}`
+                    : '—');
+                addCell(row, overallLearner ? `${overallLearner.percentage.toFixed(2)}%` : '—');
+                addCell(row, overallLearner ? gradeFor(overallLearner.percentage) : '—');
+                addCell(row, overallLearner ? `${overallLearner.completed} / ${subjects.length}` : '—');
+                addCell(row, '—');
+                foot.appendChild(row);
             });
-            const classPercentages = summaries.map(item => item.percentage).filter(value => value !== null);
-            const classAverage = classPercentages.length
-                ? classPercentages.reduce((sum, value) => sum + value, 0) / classPercentages.length
-                : null;
-            addCell(averageRow, '—');
-            addCell(averageRow, classAverage === null ? '—' : `${classAverage.toFixed(2)}%`);
-            addCell(averageRow, classAverage === null ? '—' : gradeFor(classAverage));
-            addCell(averageRow, '—');
-            addCell(averageRow, '—');
-            foot.appendChild(averageRow);
 
             const classLabel = `${data.class.class_name} - ${data.class.section}` +
                 (data.class.stream ? ` (${data.class.stream})` : '');
