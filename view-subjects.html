@@ -122,6 +122,7 @@
             color: #2c5282;
         }
     </style>
+    <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
     <nav>
@@ -141,6 +142,7 @@
                         <th>#</th>
                         <th>Subject Name</th>
                         <th>Category/Class</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="subjects-list">
@@ -160,27 +162,66 @@
     <script>
         async function loadSubjects() {
             const list = document.getElementById('subjects-list');
-            const container = document.getElementById('subjects-table-container');
-            const baseUrl = window.location.protocol === 'file:' ? 'http://127.0.0.1:3000' : window.location.origin;
 
             try {
-                const response = await fetch(`${baseUrl}/api/subjects`);
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/subjects?catalog=1`);
                 const subjects = await response.json();
+                if (!response.ok) throw new Error(subjects.error || 'Unable to load subjects.');
 
                 if (subjects.length === 0) {
-                    container.innerHTML = '<p class="no-data">No subjects found. Use the "Add Subject" page to create one.</p>';
+                    const row = document.createElement('tr');
+                    const message = document.createElement('td');
+                    message.className = 'no-data';
+                    message.colSpan = 4;
+                    message.textContent = 'No active subjects found. Use the "Add Subject" page to create one.';
+                    row.appendChild(message);
+                    list.replaceChildren(row);
                     return;
                 }
 
-                list.innerHTML = subjects.map((s, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${s.name}</td>
-                        <td>${s.class_name}</td>
-                    </tr>
-                `).join('');
+                list.replaceChildren();
+                subjects.forEach((subject, index) => {
+                    const row = document.createElement('tr');
+                    [index + 1, subject.name,
+                        subject.class_name === 'Secondary' ? 'Senior Secondary' : subject.class_name
+                    ].forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = String(value || '');
+                        row.appendChild(cell);
+                    });
+                    const action = document.createElement('td');
+                    const archiveButton = document.createElement('button');
+                    archiveButton.type = 'button';
+                    archiveButton.textContent = 'Remove';
+                    archiveButton.addEventListener('click', () => archiveSubject(subject));
+                    action.appendChild(archiveButton);
+                    row.appendChild(action);
+                    list.appendChild(row);
+                });
             } catch (err) {
-                container.innerHTML = '<p class="no-data">Error loading subjects. Is the server running?</p>';
+                const row = document.createElement('tr');
+                const message = document.createElement('td');
+                message.className = 'no-data';
+                message.colSpan = 4;
+                message.textContent = err.message || 'Unable to load subjects.';
+                row.appendChild(message);
+                list.replaceChildren(row);
+            }
+        }
+
+        async function archiveSubject(subject) {
+            if (!confirm(`Remove ${subject.name} from the active subject catalog? Existing allocations and saved results will be preserved.`)) return;
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/subjects/${encodeURIComponent(subject.id)}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to remove subject.');
+                await loadSubjects();
+            } catch (error) {
+                alert(error.message || 'Unable to remove subject.');
             }
         }
 

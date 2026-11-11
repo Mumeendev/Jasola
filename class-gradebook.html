@@ -10,6 +10,8 @@
         main { max-width:1500px; margin:0 auto; padding:1.5rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000012; }
         header,.toolbar,.filters { display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
         h1 { margin:.25rem 0; color:#1a365d; }
+        .print-brand { display:none; align-items:center; justify-content:center; gap:1rem; text-align:center; border-bottom:2px solid #2c5282; margin-bottom:1.25rem; padding-bottom:.8rem; }
+        .print-brand img { width:72px; height:72px; object-fit:contain; }
         .filters { justify-content:flex-start; margin:1rem 0; padding:1rem; background:#f7fafc; border-radius:6px; }
         label { display:grid; gap:.3rem; font-weight:600; }
         select,input { min-width:150px; padding:.65rem; border:1px solid #a0aec0; border-radius:4px; font:inherit; }
@@ -33,6 +35,7 @@
         @media print {
             body { padding:0; background:#fff; font-size:9pt; }
             main { max-width:none; padding:0; box-shadow:none; }
+            .print-brand { display:flex; }
             .toolbar,.filters,#status,#subject-progress,.helper { display:none !important; }
             .table-wrap { overflow:visible; border:0; }
             table { min-width:0; font-size:8pt; }
@@ -40,6 +43,7 @@
             thead th { position:static; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
         }
     </style>
+    <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
     <main>
@@ -53,6 +57,10 @@
                 <button type="button" id="print-button" onclick="window.print()" disabled>Print spreadsheet</button>
             </div>
         </header>
+        <div class="print-brand">
+            <img src="images/WhatsApp%20Image%202026-11-11%20at%206.03.41%20PM.jpeg" alt="Jasola Model School logo">
+            <div><h1>JASOLA MODEL SCHOOL</h1><p>CLASS GRADEBOOK</p></div>
+        </div>
         <form class="filters" id="gradebook-form">
             <label>Class and section
                 <select id="class" required><option value="">Loading classes…</option></select>

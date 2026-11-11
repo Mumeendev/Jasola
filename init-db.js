@@ -55,10 +55,12 @@ async function init() {
         id SERIAL PRIMARY KEY,
         name VARCHAR(255),
         class_name VARCHAR(50),
-        stream VARCHAR(20)
+        stream VARCHAR(20),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE
       );
     `);
     await client.query('ALTER TABLE subjects ADD COLUMN IF NOT EXISTS stream VARCHAR(20);');
+    await client.query('ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;');
     console.log('Subjects table created or exists.');
 
     // Create Learners table
@@ -143,9 +145,39 @@ async function init() {
         term VARCHAR(50) NOT NULL,
         session_year VARCHAR(50) NOT NULL,
         comment TEXT NOT NULL DEFAULT '',
+        principal_comment TEXT,
+        teacher_comment TEXT,
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, term, session_year)
+      );
+    `);
+    await client.query(`
+      ALTER TABLE learner_comments ADD COLUMN IF NOT EXISTS principal_comment TEXT;
+      ALTER TABLE learner_comments ADD COLUMN IF NOT EXISTS teacher_comment TEXT;
+      UPDATE learner_comments
+      SET principal_comment = comment
+      WHERE principal_comment IS NULL AND BTRIM(comment) <> '';
+      UPDATE learner_comments SET principal_comment = '' WHERE principal_comment IS NULL;
+      UPDATE learner_comments SET teacher_comment = '' WHERE teacher_comment IS NULL;
+      ALTER TABLE learner_comments ALTER COLUMN principal_comment SET DEFAULT '';
+      ALTER TABLE learner_comments ALTER COLUMN principal_comment SET NOT NULL;
+      ALTER TABLE learner_comments ALTER COLUMN teacher_comment SET DEFAULT '';
+      ALTER TABLE learner_comments ALTER COLUMN teacher_comment SET NOT NULL;
+      ALTER TABLE learner_comments
+        DROP CONSTRAINT IF EXISTS learner_comments_learner_id_term_session_year_key;
+      CREATE UNIQUE INDEX IF NOT EXISTS learner_comments_learner_class_term_session_unique
+      ON learner_comments (learner_id, class_id, term, session_year);
+      CREATE TABLE IF NOT EXISTS learner_behaviors (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        ratings JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, class_id, term, session_year)
       );
     `);
     console.log('Allocations table created or exists.');

@@ -20,6 +20,7 @@
         .comment-name { font-weight:600; }
         @media (max-width:640px) { .comment-row { grid-template-columns:1fr; } }
     </style>
+    <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
     <main>
@@ -44,23 +45,29 @@
                 <option value="2027/2028"></option>
             </datalist>
             <button type="submit">Prepare Report Cards</button>
-            <button type="button" id="load-comments-button">Admin Comments</button>
+            <button type="button" id="load-comments-button">Principal Comments</button>
             <a class="button" id="back-link" href="dashboard.html">Back to Dashboard</a>
         </form>
         <p id="status" role="status"></p>
         <section id="comments-panel" hidden>
-            <h2>Administrator Comments</h2>
-            <p>Add or edit a comment for each learner. Leave a field empty to remove that learner's saved comment.</p>
+            <h2 id="comments-title">Principal Comments</h2>
+            <p id="comments-description">Add or edit a principal comment for each learner.</p>
             <div id="comments-list"></div>
             <button type="button" id="save-comments-button">Save Comments</button>
         </section>
     </main>
     <script src="auth.js"></script>
     <script>
-        if (sessionStorage.getItem('role') === 'teacher') {
+        const role = sessionStorage.getItem('role');
+        const commentType = role === 'teacher' ? 'teacher' : 'principal';
+        const commentLabel = commentType === 'teacher' ? "Teacher's" : "Principal's";
+        if (role === 'teacher') {
             document.getElementById('back-link').href = 'teacher-dashboard.html';
             document.getElementById('back-link').textContent = 'Back to Teacher Page';
-            document.getElementById('load-comments-button').hidden = true;
+            document.getElementById('load-comments-button').textContent = 'Teacher Comments';
+            document.getElementById('comments-title').textContent = 'Teacher Comments';
+            document.getElementById('comments-description').textContent =
+                'Add or edit a teacher comment for each learner. Leave a field empty to clear it.';
         }
 
         const commentPanel = document.getElementById('comments-panel');
@@ -79,7 +86,7 @@
             button.disabled = true;
             try {
                 const baseUrl = await window.resolvePortalApiBase();
-                const query = new URLSearchParams({ classId, term, sessionYear });
+                const query = new URLSearchParams({ classId, term, sessionYear, type: commentType });
                 const response = await fetch(`${baseUrl}/api/learner-comments?${query}`);
                 const learners = await response.json();
                 if (!response.ok) throw new Error(learners.error || 'Unable to load learner comments.');
@@ -95,7 +102,7 @@
                     textarea.maxLength = 2000;
                     textarea.value = learner.comment;
                     textarea.dataset.learnerId = String(learner.learner_id);
-                    textarea.setAttribute('aria-label', `Administrator comment for ${name.textContent}`);
+                    textarea.setAttribute('aria-label', `${commentLabel} comment for ${name.textContent}`);
                     textarea.placeholder = 'Write a report-card comment for this learner';
                     row.append(name, textarea);
                     commentsList.appendChild(row);
@@ -127,13 +134,14 @@
                         comments: [...commentsList.querySelectorAll('textarea')].map(input => ({
                             learnerId: Number(input.dataset.learnerId),
                             comment: input.value
-                        }))
+                        })),
+                        type: commentType
                     })
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Unable to save learner comments.');
                 document.getElementById('status').textContent =
-                    `Saved comments for ${data.saved} learner(s). Comments will appear on their report cards.`;
+                    `Saved ${commentType} comments for ${data.saved} learner(s). They will appear on report cards.`;
             } catch (error) {
                 document.getElementById('status').textContent = error.message || 'Unable to save learner comments.';
             } finally {

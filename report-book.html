@@ -15,6 +15,8 @@
         .school-header { text-align:center; border-bottom:3px double #1a365d; padding-bottom:.7rem; }
         .school-header h1 { margin:.2rem; color:#1a365d; font-size:22pt; letter-spacing:.06em; }
         .school-header p { margin:.2rem; font-size:10pt; color:#4a5568; }
+        .school-brand { display:flex; align-items:center; justify-content:center; gap:1rem; }
+        .school-logo { width:82px; height:82px; object-fit:contain; }
         .report-title { margin:1rem 0; text-align:center; text-transform:uppercase; letter-spacing:.12em; }
         .student-details { display:grid; grid-template-columns:2fr 1fr 1fr; gap:.55rem 1rem; margin:1rem 0; padding:.8rem; border:1px solid #a0aec0; background:#f7fafc; }
         .student-details strong { color:#2d3748; }
@@ -26,6 +28,9 @@
         .summary div { padding:.65rem; border:1px solid #a0aec0; text-align:center; }
         .summary strong { display:block; margin-bottom:.2rem; font-size:9pt; }
         .remark { margin:.8rem 0; padding:.6rem; border:1px solid #a0aec0; min-height:2.5rem; }
+        .behavior-panel { margin:1rem 0; }
+        .behavior-panel h3 { margin:.5rem 0; }
+        .behavior-panel table { font-size:9pt; }
         .signatures { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; margin-top:2rem; text-align:center; }
         .signatures div { padding-top:.45rem; border-top:1px solid #4a5568; font-size:9pt; }
         .grade-key { margin-top:1rem; color:#4a5568; font-size:8.5pt; }
@@ -43,8 +48,12 @@
             .report-card { padding:1rem; }
             .student-details { grid-template-columns:1fr 1fr; }
             .summary { grid-template-columns:1fr 1fr; }
+            .school-logo { width:62px; height:62px; }
+            .school-brand { gap:.5rem; }
+            .school-header h1 { font-size:16pt; }
         }
     </style>
+    <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
     <main>
@@ -84,16 +93,24 @@
             return cell;
         }
 
-        function makeReport(learner, subjects, scoresByKey, commentsByLearner, classInfo, average, rank, scoredCount) {
+        function makeReport(learner, subjects, scoresByKey, commentsByLearner, behaviorsByLearner,
+            behaviorSkillNames, classInfo, average, rank, scoredCount) {
             const card = document.createElement('article');
             card.className = 'report-card';
             const school = document.createElement('div');
             school.className = 'school-header';
+            const brand = document.createElement('div');
+            brand.className = 'school-brand';
+            const logo = document.createElement('img');
+            logo.className = 'school-logo';
+            logo.src = 'images/WhatsApp%20Image%202026-11-11%20at%206.03.41%20PM.jpeg';
+            logo.alt = 'Jasola Model School logo';
             const schoolName = document.createElement('h1');
             schoolName.textContent = 'JASOLA MODEL SCHOOL';
             const address = document.createElement('p');
             address.textContent = 'ACADEMIC PERFORMANCE REPORT';
-            school.append(schoolName, address);
+            brand.append(logo, schoolName);
+            school.append(brand, address);
             const title = document.createElement('h2');
             title.className = 'report-title';
             title.textContent = `${term} Report`;
@@ -174,34 +191,42 @@
             });
             card.appendChild(summary);
 
-            const remark = document.createElement('p');
-            remark.className = 'remark';
-            const remarkLabel = document.createElement('strong');
-            remarkLabel.textContent = "Teacher's remark: ";
-            const remarkText = mean === null ? 'No scores recorded.' :
-                mean >= 70 ? 'Excellent performance. Keep it up.' :
-                mean >= 60 ? 'Very good performance. Keep working hard.' :
-                mean >= 50 ? 'Good effort. Continue to improve.' :
-                mean >= 40 ? 'Pass. More consistent study is encouraged.' :
-                'Needs improvement. Additional support and practice are recommended.';
-            remark.append(remarkLabel, document.createTextNode(remarkText));
-            card.appendChild(remark);
+            const behaviorRatings = behaviorsByLearner.get(learner.id) || {};
+            const behaviorPanel = document.createElement('section');
+            behaviorPanel.className = 'behavior-panel';
+            const behaviorTitle = document.createElement('h3');
+            behaviorTitle.textContent = 'Behavioral Skills';
+            behaviorPanel.appendChild(behaviorTitle);
+            const behaviorTable = document.createElement('table');
+            const behaviorHead = document.createElement('thead');
+            const behaviorHeader = document.createElement('tr');
+            addCell(behaviorHeader, 'Skill', 'th');
+            addCell(behaviorHeader, 'Rating', 'th');
+            behaviorHead.appendChild(behaviorHeader);
+            behaviorTable.appendChild(behaviorHead);
+            const behaviorBody = document.createElement('tbody');
+            behaviorSkillNames.forEach(skill => {
+                const row = document.createElement('tr');
+                addCell(row, skill);
+                addCell(row, behaviorRatings[skill] || '—');
+                behaviorBody.appendChild(row);
+            });
+            behaviorTable.append(behaviorBody);
+            behaviorPanel.appendChild(behaviorTable);
+            card.appendChild(behaviorPanel);
 
-            const principal = document.createElement('p');
-            principal.className = 'remark';
-            const adminComment = document.createElement('p');
-            adminComment.className = 'remark';
-            const adminLabel = document.createElement('strong');
-            adminLabel.textContent = "Administrator's comment: ";
-            adminComment.append(adminLabel, document.createTextNode(
-                commentsByLearner.get(learner.id) || 'No administrator comment.'
-            ));
-            card.appendChild(adminComment);
-
-            const principalLabel = document.createElement('strong');
-            principalLabel.textContent = "Principal's comment: ";
-            principal.append(principalLabel, document.createTextNode('____________________________________________'));
-            card.appendChild(principal);
+            const comments = commentsByLearner.get(learner.id) || {};
+            [
+                ["Teacher's comment", comments.teacher_comment || 'No teacher comment.'],
+                ["Principal's comment", comments.principal_comment || 'No principal comment.']
+            ].forEach(([label, text]) => {
+                const comment = document.createElement('p');
+                comment.className = 'remark';
+                const heading = document.createElement('strong');
+                heading.textContent = `${label}: `;
+                comment.append(heading, document.createTextNode(text));
+                card.appendChild(comment);
+            });
 
             const signatures = document.createElement('div');
             signatures.className = 'signatures';
@@ -234,7 +259,10 @@
                     `${score.learner_id}:${score.subject_id}`, score
                 ]));
                 const commentsByLearner = new Map((data.comments || []).map(comment => [
-                    comment.learner_id, comment.comment
+                    comment.learner_id, comment
+                ]));
+                const behaviorsByLearner = new Map((data.behaviors || []).map(behavior => [
+                    behavior.learner_id, behavior.ratings
                 ]));
                 const summaries = data.learners.map(learner => {
                     const totals = data.subjects
@@ -254,6 +282,7 @@
                         ranked.findIndex(item => item.average === summary.average) + 1;
                     const report = makeReport(
                         summary.learner, data.subjects, scores, commentsByLearner,
+                        behaviorsByLearner, data.behaviorSkills || [],
                         data.class, summary.average,
                         rank, ranked.length
                     );

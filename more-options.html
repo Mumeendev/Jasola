@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>More Options - Jasola Model School</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; min-height:100vh; padding:2rem; background:#edf2f7; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { max-width:900px; margin:0 auto; }
+        header,.options { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+        .options { justify-content:flex-start; margin-top:1.5rem; }
+        .option { flex:1 1 240px; padding:1.5rem; border-radius:8px; background:#fff; color:#2c5282; text-decoration:none; box-shadow:0 4px 12px #00000012; }
+        .option:hover { background:#f7fafc; }
+        .button { padding:.7rem 1rem; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; }
+    </style>
+    <link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+    <main>
+        <header>
+            <div><h1>More Options</h1><p>Additional class and school tools.</p></div>
+            <a class="button" id="back-link" href="dashboard.html">Dashboard</a>
+        </header>
+        <section class="options">
+            <a class="option" href="behavioral-skills.html"><h2>Behavioral Skills</h2><p>Select a rating for each learner and print it on their report card.</p></a>
+            <a class="option admin-option" href="view-users.html"><h2>Manage Users</h2><p>Remove non-administrator accounts.</p></a>
+            <a class="option admin-option" href="view-subjects.html"><h2>Manage Subjects</h2><p>Archive subjects without deleting saved results.</p></a>
+        </section>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        if (sessionStorage.getItem('role') === 'teacher') {
+            document.getElementById('back-link').href = 'teacher-dashboard.html';
+            document.querySelectorAll('.admin-option').forEach(option => option.hidden = true);
+        }
+    </script>
+</body>
+</html>

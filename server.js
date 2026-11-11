@@ -116,7 +116,10 @@ function isSeniorSecondaryClass(className) {
 }
 
 function subjectCategoryForClass(className) {
-  if (isSeniorSecondaryClass(className) || /secondary|(?:^|\b)jss?\s*[-.]?\s*[1-3]\b/i.test(className)) {
+  if (/junior\s+secondary|(?:^|\b)jss?\s*[-.]?\s*[1-3]\b/i.test(className)) {
+    return 'Junior Secondary';
+  }
+  if (isSeniorSecondaryClass(className) || /secondary/i.test(className)) {
     return 'Secondary';
   }
   if (/primary|(?:^|\b)pry\s*[-.]?\s*[1-6]\b/i.test(className)) return 'Primary';
@@ -127,6 +130,7 @@ function subjectCategoryForClass(className) {
 function isSubjectAllowedForClass(subject, classRow) {
   if (subject.stream && subject.stream !== classRow.stream) return false;
   const category = subjectCategoryForClass(classRow.class_name);
+  if (category === 'Junior Secondary' && subject.class_name === 'Secondary') return true;
   return !category || !subject.class_name || subject.class_name === category;
 }
 
@@ -135,6 +139,8 @@ function teacherUsernameFromOthername(othername) {
 }
 
 const subjectStreams = new Set(['Science', 'Arts', 'Commercial']);
+const behaviorSkills = ['Attentiveness', 'Punctuality', 'Neatness', 'Leadership'];
+const behaviorRatings = new Set(['Excellent', 'Very Good', 'Good', 'Fair', 'Poor']);
 
 async function initializeDatabase() {
   const client = await pool.connect();
@@ -173,11 +179,13 @@ async function initializeDatabase() {
         id SERIAL PRIMARY KEY,
         name VARCHAR(255),
         class_name VARCHAR(50),
-        stream VARCHAR(20)
+        stream VARCHAR(20),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE
       );
       ALTER TABLE subjects ADD COLUMN IF NOT EXISTS name VARCHAR(255);
       ALTER TABLE subjects ADD COLUMN IF NOT EXISTS class_name VARCHAR(50);
       ALTER TABLE subjects ADD COLUMN IF NOT EXISTS stream VARCHAR(20);
+      ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
       CREATE TABLE IF NOT EXISTS learners (
         id SERIAL PRIMARY KEY,
@@ -243,9 +251,38 @@ async function initializeDatabase() {
         term VARCHAR(50) NOT NULL,
         session_year VARCHAR(50) NOT NULL,
         comment TEXT NOT NULL DEFAULT '',
+        principal_comment TEXT,
+        teacher_comment TEXT,
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, term, session_year)
+      );
+      ALTER TABLE learner_comments ADD COLUMN IF NOT EXISTS principal_comment TEXT;
+      ALTER TABLE learner_comments ADD COLUMN IF NOT EXISTS teacher_comment TEXT;
+      UPDATE learner_comments
+      SET principal_comment = comment
+      WHERE principal_comment IS NULL AND BTRIM(comment) <> '';
+      UPDATE learner_comments SET principal_comment = '' WHERE principal_comment IS NULL;
+      UPDATE learner_comments SET teacher_comment = '' WHERE teacher_comment IS NULL;
+      ALTER TABLE learner_comments ALTER COLUMN principal_comment SET DEFAULT '';
+      ALTER TABLE learner_comments ALTER COLUMN principal_comment SET NOT NULL;
+      ALTER TABLE learner_comments ALTER COLUMN teacher_comment SET DEFAULT '';
+      ALTER TABLE learner_comments ALTER COLUMN teacher_comment SET NOT NULL;
+      ALTER TABLE learner_comments
+        DROP CONSTRAINT IF EXISTS learner_comments_learner_id_term_session_year_key;
+      CREATE UNIQUE INDEX IF NOT EXISTS learner_comments_learner_class_term_session_unique
+        ON learner_comments (learner_id, class_id, term, session_year);
+
+      CREATE TABLE IF NOT EXISTS learner_behaviors (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        ratings JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, class_id, term, session_year)
       );
     `);
     await client.query(`
@@ -391,6 +428,40 @@ app.post('/api/users', requireRole('admin'), async (req, res) => {
     }
     console.error('Creating user failed:', err);
     res.status(500).json({ error: 'Unable to create user.' });
+  }
+});
+
+app.delete('/api/users/:username', requireRole('admin'), async (req, res) => {
+  const username = req.params.username;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await client.query(
+      'SELECT role FROM users WHERE username = $1 FOR UPDATE',
+      [username]
+    );
+    if (!user.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    if (user.rows[0].role === 'admin') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Administrator accounts cannot be removed.' });
+    }
+    await client.query('UPDATE allocations SET teacher_username = NULL WHERE teacher_username = $1', [username]);
+    await client.query('UPDATE classes SET class_teacher = NULL WHERE class_teacher = $1', [username]);
+    await client.query('UPDATE learner_results SET updated_by = NULL WHERE updated_by = $1', [username]);
+    await client.query('UPDATE learner_comments SET updated_by = NULL WHERE updated_by = $1', [username]);
+    await client.query('UPDATE learner_behaviors SET updated_by = NULL WHERE updated_by = $1', [username]);
+    await client.query('DELETE FROM users WHERE username = $1', [username]);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Removing user failed:', err);
+    res.status(500).json({ error: 'Unable to remove user.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -544,7 +615,10 @@ app.get('/api/teachers/:username/subjects', requireRole('admin'), async (req, re
     );
     if (!teacher.rows.length) return res.status(404).json({ error: 'Teacher not found.' });
     const result = await pool.query(
-      'SELECT class_id, subject_id FROM allocations WHERE teacher_username = $1 AND subject_id IS NOT NULL AND class_id IS NOT NULL',
+      `SELECT a.class_id, a.subject_id
+       FROM allocations a JOIN subjects s ON s.id = a.subject_id
+       WHERE a.teacher_username = $1 AND s.is_active = TRUE
+         AND a.subject_id IS NOT NULL AND a.class_id IS NOT NULL`,
       [req.params.username]
     );
     res.json({
@@ -564,7 +638,7 @@ app.get('/api/subjects', async (req, res) => {
         return res.status(403).json({ error: 'Only administrators can view the subject catalog.' });
       }
       const catalog = await pool.query(
-        'SELECT id, name, class_name, stream FROM subjects ORDER BY class_name, stream NULLS FIRST, name'
+        'SELECT id, name, class_name, stream FROM subjects WHERE is_active = TRUE ORDER BY class_name, stream NULLS FIRST, name'
       );
       return res.json(catalog.rows);
     }
@@ -575,7 +649,7 @@ app.get('/api/subjects', async (req, res) => {
          FROM subjects s
          JOIN allocations a ON a.subject_id = s.id
          JOIN classes c ON c.id = a.class_id
-         WHERE a.teacher_username = $1
+         WHERE a.teacher_username = $1 AND s.is_active = TRUE
            AND (s.stream IS NULL OR s.stream = c.stream)
          ORDER BY s.class_name, s.name`,
         [req.user.username]
@@ -586,7 +660,7 @@ app.get('/api/subjects', async (req, res) => {
          FROM subjects s
          JOIN allocations a ON a.subject_id = s.id
          JOIN classes c ON c.id = a.class_id
-         WHERE s.stream IS NULL OR s.stream = c.stream
+         WHERE s.is_active = TRUE AND (s.stream IS NULL OR s.stream = c.stream)
          ORDER BY c.class_name, c.section, s.name`
       );
     res.json(result.rows.filter((subject) => isSubjectAllowedForClass(
@@ -603,7 +677,9 @@ app.post('/api/subjects', requireRole('admin'), async (req, res) => {
   const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
   const className = typeof req.body.className === 'string' ? req.body.className.trim() : '';
   const stream = typeof req.body.stream === 'string' ? req.body.stream.trim() : '';
-  if (!name || !className) return res.status(400).json({ error: 'Subject and class are required.' });
+  if (!name || !['Creche', 'Primary', 'Junior Secondary', 'Secondary'].includes(className)) {
+    return res.status(400).json({ error: 'Subject and a valid category are required.' });
+  }
   if (stream && (className !== 'Secondary' || !subjectStreams.has(stream))) {
     return res.status(400).json({ error: 'Choose a valid stream for a secondary subject.' });
   }
@@ -616,6 +692,24 @@ app.post('/api/subjects', requireRole('admin'), async (req, res) => {
   } catch (err) {
     console.error('Creating subject failed:', err);
     res.status(500).json({ error: 'Unable to create subject.' });
+  }
+});
+
+app.delete('/api/subjects/:id', requireRole('admin'), async (req, res) => {
+  const subjectId = Number(req.params.id);
+  if (!Number.isInteger(subjectId) || subjectId <= 0) {
+    return res.status(400).json({ error: 'Select a valid subject.' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE subjects SET is_active = FALSE WHERE id = $1 AND is_active = TRUE RETURNING id',
+      [subjectId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Active subject not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Archiving subject failed:', err);
+    res.status(500).json({ error: 'Unable to remove subject from the active catalog.' });
   }
 });
 
@@ -710,8 +804,9 @@ app.get('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) =
       [classId]
     );
     if (!classResult.rows.length) return res.status(404).json({ error: 'Class not found.' });
-    const subject = await pool.query('SELECT id, name, class_name, stream FROM subjects WHERE id = $1', [subjectId]);
+    const subject = await pool.query('SELECT id, name, class_name, stream, is_active FROM subjects WHERE id = $1', [subjectId]);
     if (!subject.rows.length) return res.status(404).json({ error: 'Subject not found.' });
+    if (!subject.rows[0].is_active) return res.status(409).json({ error: 'This subject has been archived and cannot receive new results.' });
     if (!isSubjectAllowedForClass(subject.rows[0], classResult.rows[0])) {
       return res.status(400).json({ error: 'This subject is not available for the selected class stream.' });
     }
@@ -789,10 +884,14 @@ app.put('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) =
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Class not found.' });
     }
-    const subject = await client.query('SELECT 1 FROM subjects WHERE id = $1', [subjectId]);
+    const subject = await client.query('SELECT is_active FROM subjects WHERE id = $1', [subjectId]);
     if (!subject.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Subject not found.' });
+    }
+    if (!subject.rows[0].is_active) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This subject has been archived and cannot receive new results.' });
     }
     const classDetails = await client.query('SELECT class_name, stream FROM classes WHERE id = $1', [classId]);
     const subjectDetails = await client.query('SELECT class_name, stream FROM subjects WHERE id = $1', [subjectId]);
@@ -910,8 +1009,14 @@ app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) =
         [classId, term, sessionYear]
       );
     const commentsResult = await pool.query(
-      `SELECT learner_id, comment
+      `SELECT learner_id, principal_comment, teacher_comment
        FROM learner_comments
+       WHERE class_id = $1 AND term = $2 AND session_year = $3`,
+      [classId, term.trim(), sessionYear.trim()]
+    );
+    const behaviorsResult = await pool.query(
+      `SELECT learner_id, ratings
+       FROM learner_behaviors
        WHERE class_id = $1 AND term = $2 AND session_year = $3`,
       [classId, term.trim(), sessionYear.trim()]
     );
@@ -924,7 +1029,9 @@ app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) =
       learners: learnersResult.rows,
       subjects: allowedSubjects,
       scores: scoresResult.rows.filter((score) => allowedSubjectIds.has(score.subject_id)),
-      comments: commentsResult.rows
+      comments: commentsResult.rows,
+      behaviors: behaviorsResult.rows,
+      behaviorSkills
     });
   } catch (err) {
     console.error('Loading report cards failed:', err);
@@ -932,23 +1039,37 @@ app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) =
   }
 });
 
-app.get('/api/learner-comments', requireRole('admin'), async (req, res) => {
+app.get('/api/learner-comments', requireRole('admin', 'teacher'), async (req, res) => {
   const classId = Number(req.query.classId);
   const { term, sessionYear } = req.query;
+  const commentType = req.query.type;
   if (!Number.isInteger(classId) || classId <= 0 ||
       typeof term !== 'string' || !term.trim() ||
-      typeof sessionYear !== 'string' || !sessionYear.trim()) {
+      typeof sessionYear !== 'string' || !sessionYear.trim() ||
+      !['principal', 'teacher'].includes(commentType)) {
     return res.status(400).json({ error: 'Select a class, term, and session.' });
   }
+  if ((commentType === 'principal' && req.user.role !== 'admin') ||
+      (commentType === 'teacher' && req.user.role !== 'teacher')) {
+    return res.status(403).json({ error: 'You cannot manage this type of comment.' });
+  }
+  const commentColumn = commentType === 'principal' ? 'principal_comment' : 'teacher_comment';
   try {
+    if (req.user.role === 'teacher') {
+      const allocation = await pool.query(
+        'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
+        [req.user.username, classId]
+      );
+      if (!allocation.rows.length) return res.status(403).json({ error: 'You are not assigned to this class.' });
+    }
     const classExists = await pool.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
     if (!classExists.rows.length) return res.status(404).json({ error: 'Class not found.' });
     const result = await pool.query(
       `SELECT l.id AS learner_id, l.surname, l.othername, l.admission_number,
-              COALESCE(lc.comment, '') AS comment
+              COALESCE(lc.${commentColumn}, '') AS comment
        FROM learners l
        LEFT JOIN learner_comments lc
-         ON lc.learner_id = l.id AND lc.term = $2 AND lc.session_year = $3
+         ON lc.learner_id = l.id AND lc.class_id = $1 AND lc.term = $2 AND lc.session_year = $3
        WHERE l.class_id = $1
        ORDER BY l.surname, l.othername`,
       [classId, term.trim(), sessionYear.trim()]
@@ -960,18 +1081,25 @@ app.get('/api/learner-comments', requireRole('admin'), async (req, res) => {
   }
 });
 
-app.put('/api/learner-comments', requireRole('admin'), async (req, res) => {
+app.put('/api/learner-comments', requireRole('admin', 'teacher'), async (req, res) => {
   const classId = Number(req.body.classId);
   const { term, sessionYear, comments } = req.body;
+  const commentType = req.body.type;
   if (!Number.isInteger(classId) || classId <= 0 ||
       typeof term !== 'string' || !term.trim() ||
       typeof sessionYear !== 'string' || !sessionYear.trim() ||
+      !['principal', 'teacher'].includes(commentType) ||
       !Array.isArray(comments) ||
       comments.some((item) => !item || typeof item !== 'object' ||
         !Number.isInteger(Number(item.learnerId)) || Number(item.learnerId) <= 0 ||
         typeof item.comment !== 'string' || item.comment.length > 2000)) {
     return res.status(400).json({ error: 'Class, term, session, and valid learner comments are required.' });
   }
+  if ((commentType === 'principal' && req.user.role !== 'admin') ||
+      (commentType === 'teacher' && req.user.role !== 'teacher')) {
+    return res.status(403).json({ error: 'You cannot save this type of comment.' });
+  }
+  const commentColumn = commentType === 'principal' ? 'principal_comment' : 'teacher_comment';
   const rows = comments.map((item) => ({
     learnerId: Number(item.learnerId),
     comment: item.comment.trim()
@@ -987,6 +1115,16 @@ app.put('/api/learner-comments', requireRole('admin'), async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Class not found.' });
     }
+    if (req.user.role === 'teacher') {
+      const allocation = await client.query(
+        'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
+        [req.user.username, classId]
+      );
+      if (!allocation.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'You are not assigned to this class.' });
+      }
+    }
     const learners = await client.query('SELECT id FROM learners WHERE class_id = $1', [classId]);
     const learnerIds = new Set(learners.rows.map((learner) => learner.id));
     if (rows.some((row) => !learnerIds.has(row.learnerId))) {
@@ -994,18 +1132,12 @@ app.put('/api/learner-comments', requireRole('admin'), async (req, res) => {
       return res.status(400).json({ error: 'Every commented learner must belong to the selected class.' });
     }
     for (const row of rows) {
-      if (!row.comment) {
-        await client.query(
-          'DELETE FROM learner_comments WHERE learner_id = $1 AND term = $2 AND session_year = $3',
-          [row.learnerId, term.trim(), sessionYear.trim()]
-        );
-        continue;
-      }
       await client.query(
-        `INSERT INTO learner_comments (learner_id, class_id, term, session_year, comment, updated_by)
+        `INSERT INTO learner_comments
+           (learner_id, class_id, term, session_year, ${commentColumn}, updated_by)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (learner_id, term, session_year)
-         DO UPDATE SET class_id = EXCLUDED.class_id, comment = EXCLUDED.comment,
+         ON CONFLICT (learner_id, class_id, term, session_year)
+         DO UPDATE SET class_id = EXCLUDED.class_id, ${commentColumn} = EXCLUDED.${commentColumn},
            updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
         [row.learnerId, classId, term.trim(), sessionYear.trim(), row.comment, req.user.username]
       );
@@ -1016,6 +1148,118 @@ app.put('/api/learner-comments', requireRole('admin'), async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Saving learner comments failed:', err);
     res.status(500).json({ error: 'Unable to save learner comments.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/learner-behaviors', requireRole('admin', 'teacher'), async (req, res) => {
+  const classId = Number(req.query.classId);
+  const { term, sessionYear } = req.query;
+  if (!Number.isInteger(classId) || classId <= 0 ||
+      typeof term !== 'string' || !term.trim() ||
+      typeof sessionYear !== 'string' || !sessionYear.trim()) {
+    return res.status(400).json({ error: 'Select a class, term, and session.' });
+  }
+  try {
+    if (req.user.role === 'teacher') {
+      const allocation = await pool.query(
+        'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
+        [req.user.username, classId]
+      );
+      if (!allocation.rows.length) return res.status(403).json({ error: 'You are not assigned to this class.' });
+    }
+    const classExists = await pool.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
+    if (!classExists.rows.length) return res.status(404).json({ error: 'Class not found.' });
+    const result = await pool.query(
+      `SELECT l.id AS learner_id, l.surname, l.othername, l.admission_number,
+              COALESCE(lb.ratings, '{}'::jsonb) AS ratings
+       FROM learners l
+       LEFT JOIN learner_behaviors lb
+         ON lb.learner_id = l.id AND lb.class_id = $1 AND lb.term = $2 AND lb.session_year = $3
+       WHERE l.class_id = $1
+       ORDER BY l.surname, l.othername`,
+      [classId, term.trim(), sessionYear.trim()]
+    );
+    res.json({ skills: behaviorSkills, learners: result.rows });
+  } catch (err) {
+    console.error('Loading learner behavioral skills failed:', err);
+    res.status(500).json({ error: 'Unable to load behavioral skills.' });
+  }
+});
+
+app.put('/api/learner-behaviors', requireRole('admin', 'teacher'), async (req, res) => {
+  const classId = Number(req.body.classId);
+  const { term, sessionYear, learners } = req.body;
+  if (!Number.isInteger(classId) || classId <= 0 ||
+      typeof term !== 'string' || !term.trim() ||
+      typeof sessionYear !== 'string' || !sessionYear.trim() ||
+      !Array.isArray(learners) ||
+      learners.some((item) => !item || typeof item !== 'object' ||
+        !Number.isInteger(Number(item.learnerId)) || Number(item.learnerId) <= 0 ||
+        !item.ratings || typeof item.ratings !== 'object' || Array.isArray(item.ratings) ||
+        Object.entries(item.ratings).some(([skill, rating]) =>
+          !behaviorSkills.includes(skill) ||
+          (rating !== '' && (typeof rating !== 'string' || !behaviorRatings.has(rating)))
+        ))) {
+    return res.status(400).json({ error: 'Class, term, session, and valid learner ratings are required.' });
+  }
+  const rows = learners.map((item) => ({
+    learnerId: Number(item.learnerId),
+    ratings: Object.fromEntries(Object.entries(item.ratings).filter(([, rating]) => rating !== ''))
+  }));
+  if (new Set(rows.map((item) => item.learnerId)).size !== rows.length) {
+    return res.status(400).json({ error: 'A learner appears more than once in the ratings.' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const classExists = await client.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
+    if (!classExists.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+    if (req.user.role === 'teacher') {
+      const allocation = await client.query(
+        'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
+        [req.user.username, classId]
+      );
+      if (!allocation.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'You are not assigned to this class.' });
+      }
+    }
+    const classLearners = await client.query('SELECT id FROM learners WHERE class_id = $1', [classId]);
+    const learnerIds = new Set(classLearners.rows.map((learner) => learner.id));
+    if (rows.some((row) => !learnerIds.has(row.learnerId))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Every learner must belong to the selected class.' });
+    }
+    for (const row of rows) {
+      if (!Object.keys(row.ratings).length) {
+        await client.query(
+          'DELETE FROM learner_behaviors WHERE learner_id = $1 AND class_id = $2 AND term = $3 AND session_year = $4',
+          [row.learnerId, classId, term.trim(), sessionYear.trim()]
+        );
+        continue;
+      }
+      await client.query(
+        `INSERT INTO learner_behaviors
+           (learner_id, class_id, term, session_year, ratings, updated_by)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+         ON CONFLICT (learner_id, class_id, term, session_year)
+         DO UPDATE SET class_id = EXCLUDED.class_id, ratings = EXCLUDED.ratings,
+           updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        [row.learnerId, classId, term.trim(), sessionYear.trim(),
+          JSON.stringify(row.ratings), req.user.username]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, saved: rows.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Saving learner behavioral skills failed:', err);
+    res.status(500).json({ error: 'Unable to save behavioral skills.' });
   } finally {
     client.release();
   }
@@ -1145,8 +1389,9 @@ app.post('/api/allocate', requireRole('admin'), async (req, res) => {
       [teacherUsername]
     );
     if (!teacher.rows.length) return res.status(404).json({ error: 'Teacher not found.' });
-    const subject = await pool.query('SELECT id, name, class_name, stream FROM subjects WHERE id = $1', [Number(subjectId)]);
+    const subject = await pool.query('SELECT id, name, class_name, stream, is_active FROM subjects WHERE id = $1', [Number(subjectId)]);
     if (!subject.rows.length) return res.status(404).json({ error: 'Subject not found.' });
+    if (!subject.rows[0].is_active) return res.status(409).json({ error: 'This subject has been archived.' });
     const classResult = await pool.query('SELECT class_name, stream FROM classes WHERE id = $1', [classId]);
     if (!classResult.rows.length) return res.status(404).json({ error: 'Class not found.' });
     if (!isSubjectAllowedForClass(subject.rows[0], classResult.rows[0])) {
@@ -1194,7 +1439,7 @@ app.put('/api/allocate', requireRole('admin'), async (req, res) => {
       return res.status(404).json({ error: 'Class not found.' });
     }
     const subjects = ids.length
-      ? await client.query('SELECT id, name, class_name, stream FROM subjects WHERE id = ANY($1::int[])', [ids])
+      ? await client.query('SELECT id, name, class_name, stream FROM subjects WHERE id = ANY($1::int[]) AND is_active = TRUE', [ids])
       : { rows: [] };
     if (subjects.rows.length !== ids.length) {
       await client.query('ROLLBACK');
@@ -1206,7 +1451,10 @@ app.put('/api/allocate', requireRole('admin'), async (req, res) => {
     }
 
     await client.query(
-      'DELETE FROM allocations WHERE teacher_username = $1 AND class_id = $2',
+      `DELETE FROM allocations a
+       USING subjects s
+       WHERE a.subject_id = s.id AND s.is_active = TRUE
+         AND a.teacher_username = $1 AND a.class_id = $2`,
       [teacherUsername, classId]
     );
     for (const subject of subjects.rows) {

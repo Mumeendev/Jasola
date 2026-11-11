@@ -161,6 +161,7 @@
             color: #2c5282;
         }
     </style>
+    <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
     <nav>
@@ -185,7 +186,7 @@
                         <th>Email</th>
                         <th>Phone</th>
                         <th>Role</th>
-                        <th>Teacher login</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="users-list">
@@ -241,8 +242,18 @@
                         passwordButton.style.marginLeft = '0.5rem';
                         passwordButton.addEventListener('click', () => changeTeacherPassword(user.username));
                         actionCell.append(credentialsButton, passwordButton);
+                    }
+                    if (user.role === 'admin') {
+                        const protectedText = document.createElement('span');
+                        protectedText.textContent = 'Admin account protected';
+                        actionCell.appendChild(protectedText);
                     } else {
-                        actionCell.textContent = '—';
+                        const removeButton = document.createElement('button');
+                        removeButton.type = 'button';
+                        removeButton.textContent = 'Remove user';
+                        removeButton.style.marginLeft = '0.5rem';
+                        removeButton.addEventListener('click', () => removeUser(user));
+                        actionCell.appendChild(removeButton);
                     }
                     row.appendChild(actionCell);
                     usersList.appendChild(row);
@@ -250,6 +261,25 @@
             } catch (err) {
                 console.error('Fetch users error:', err);
                 usersList.innerHTML = '<tr><td class="no-users" colspan="6">Unable to load users. Please try again.</td></tr>';
+            }
+        }
+
+        async function removeUser(user) {
+            if (!confirm(`Remove ${user.surname} ${user.othername}'s account? Existing marks and comments will be preserved, but teacher assignments and access will be removed.`)) return;
+            const message = document.getElementById('credential-message');
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/users/${encodeURIComponent(user.username)}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to remove user.');
+                message.textContent = 'User account removed.';
+                message.style.display = 'block';
+                await loadUsers();
+            } catch (error) {
+                message.textContent = error.message || 'Unable to remove user.';
+                message.style.display = 'block';
             }
         }
 

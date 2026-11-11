@@ -22,6 +22,7 @@
         #credentials { padding:1rem; background:#ebf8ff; border-radius:5px; overflow-wrap:anywhere; }
         a { color:#2c5282; }
     </style>
+    <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
     <main>
@@ -106,14 +107,15 @@
             }
             const className = selectedClass.class_name.toLowerCase();
             const category = /senior\s+secondary|(?:^|\b)(?:sss?|jss)\s*[-.]?\s*[1-3]\b|secondary/i.test(className)
-                ? 'Secondary'
+                ? (/(?:^|\b)jss?\s*[-.]?\s*[1-3]\b|junior\s+secondary/i.test(className) ? 'Junior Secondary' : 'Secondary')
                 : /primary|pry/i.test(className)
                     ? 'Primary'
                     : /creche|nursery|kindergarten|^kg/i.test(className)
                         ? 'Creche'
                         : '';
             const eligibleSubjects = allSubjects.filter(subject =>
-                (!category || subject.class_name === category) &&
+                (!category || subject.class_name === category ||
+                    (category === 'Junior Secondary' && subject.class_name === 'Secondary')) &&
                 (!subject.stream || subject.stream === selectedClass.stream)
             );
             if (!eligibleSubjects.length) {
