@@ -67,7 +67,12 @@
             </label>
             <label>Academic session
                 <input id="session" type="text" inputmode="numeric" pattern="[0-9]{4}/[0-9]{4}"
-                       placeholder="e.g. 2025/2026" title="Enter the session as YYYY/YYYY" required>
+                       placeholder="e.g. 2026/2027" list="session-options" title="Enter the session as YYYY/YYYY" required>
+                <datalist id="session-options">
+                    <option value="2025/2026"></option>
+                    <option value="2026/2027"></option>
+                    <option value="2027/2028"></option>
+                </datalist>
             </label>
             <button type="submit" id="load-button">Load class results</button>
         </form>
