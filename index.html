@@ -161,7 +161,7 @@
             } catch (err) {
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
-                    alert('The portal server is not running!\n\nPlease start it with "npm start" before accessing the login page.');
+                    alert('Cannot reach the portal backend.\n\nOn Render, deploy this repository as a Node Web Service using render.yaml. If the frontend is a separate Static Site, set apiBaseUrl in portal-config.json to the backend service URL.');
                 });
                 link.title = 'Server is currently offline. Please start the server.';
                 link.style.opacity = '0.7';

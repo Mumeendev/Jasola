@@ -74,7 +74,9 @@
                         // Try the next candidate.
                     }
                 }
-                throw new Error('Cannot reach the portal backend. Start it with npm start.');
+                throw new Error(
+                    'Cannot reach the portal backend. On Render, deploy this repository as a Node Web Service using render.yaml. If the frontend is a separate Static Site, set apiBaseUrl in portal-config.json to the backend service URL.'
+                );
             })();
         }
         return apiBasePromise;

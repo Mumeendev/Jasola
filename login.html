@@ -278,7 +278,7 @@
                         if (window.location.protocol === 'file:') {
                             errorMessage.innerHTML = '<strong>Connection Error!</strong><br>Cannot reach the server. Make sure you have started it with "npm start".';
                         } else {
-                            errorMessage.innerHTML = '<strong>Server Error!</strong><br>Lost connection to the portal server. Please ensure the server is still running.';
+                            errorMessage.innerHTML = '<strong>Server Error!</strong><br>Cannot reach the portal backend. On Render, confirm this repository is deployed as a Node Web Service using render.yaml. If the frontend and backend are separate services, check apiBaseUrl in portal-config.json.';
                         }
                         errorMessage.style.display = 'block';
                         submitBtn.disabled = false;
