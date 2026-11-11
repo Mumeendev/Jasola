@@ -75,7 +75,7 @@
                     }
                 }
                 throw new Error(
-                    'Cannot reach the portal backend. On Render, deploy this repository as a Node Web Service using render.yaml. If the frontend is a separate Static Site, set apiBaseUrl in portal-config.json to the backend service URL.'
+                    'Cannot reach the portal backend. On Render, deploy this repository as a Node Web Service using render.yaml, set DATABASE_URL in the service environment, and verify /api/health. If the frontend is a separate Static Site, set apiBaseUrl in portal-config.json to the backend service URL.'
                 );
             })();
         }

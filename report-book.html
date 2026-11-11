@@ -59,7 +59,7 @@
     <main>
         <div class="toolbar">
             <a id="back-link" href="report-cards.html">Back to selection</a>
-            <button type="button" onclick="window.print()">Print Report Cards</button>
+            <button type="button" id="print-button" onclick="window.print()">Print Report Cards</button>
         </div>
         <p id="status" role="status">Preparing report cards…</p>
         <section id="reports"></section>
@@ -70,8 +70,13 @@
         const classId = Number(params.get('classId'));
         const term = params.get('term') || '';
         const sessionYear = params.get('sessionYear') || '';
+        const learnerIdParam = params.get('learnerId');
+        const learnerId = learnerIdParam === null ? null : Number(learnerIdParam);
         const reports = document.getElementById('reports');
         const status = document.getElementById('status');
+        if (learnerId !== null) {
+            document.getElementById('print-button').textContent = 'Print This Report Card';
+        }
         if (sessionStorage.getItem('role') === 'teacher') {
             document.getElementById('back-link').href = 'teacher-dashboard.html';
             document.getElementById('back-link').textContent = 'Back to Teacher Page';
@@ -245,7 +250,8 @@
         }
 
         async function loadReports() {
-            if (!Number.isInteger(classId) || classId <= 0 || !term || !sessionYear) {
+            if (!Number.isInteger(classId) || classId <= 0 || !term || !sessionYear ||
+                (learnerId !== null && (!Number.isInteger(learnerId) || learnerId <= 0))) {
                 status.textContent = 'Invalid report selection. Return to the report-card page and select a class, term, and session.';
                 return;
             }
@@ -255,6 +261,13 @@
                 const response = await fetch(`${baseUrl}/api/report-cards?${query}`);
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Unable to prepare report cards.');
+                const selectedLearners = learnerId === null
+                    ? data.learners
+                    : data.learners.filter(learner => learner.id === learnerId);
+                if (learnerId !== null && !selectedLearners.length) {
+                    status.textContent = 'The selected learner is not registered in this class.';
+                    return;
+                }
                 const scores = new Map(data.scores.map(score => [
                     `${score.learner_id}:${score.subject_id}`, score
                 ]));
@@ -264,7 +277,7 @@
                 const behaviorsByLearner = new Map((data.behaviors || []).map(behavior => [
                     behavior.learner_id, behavior.ratings
                 ]));
-                const summaries = data.learners.map(learner => {
+                const allSummaries = data.learners.map(learner => {
                     const totals = data.subjects
                         .map(subject => scores.get(`${learner.id}:${subject.id}`))
                         .filter(Boolean)
@@ -274,8 +287,11 @@
                         : null;
                     return { learner, average };
                 });
-                const ranked = summaries.filter(item => item.average !== null)
+                const ranked = allSummaries.filter(item => item.average !== null)
                     .sort((left, right) => right.average - left.average);
+                const summaries = learnerId === null
+                    ? allSummaries
+                    : allSummaries.filter(item => item.learner.id === learnerId);
                 reports.replaceChildren();
                 summaries.forEach(summary => {
                     const rank = summary.average === null ? null :
@@ -288,8 +304,10 @@
                     );
                     reports.appendChild(report.card);
                 });
-                status.textContent = data.learners.length
-                    ? `${data.learners.length} report card(s) prepared for ${data.class.class_name} - ${data.class.section}. Use Print Report Cards to print.`
+                status.textContent = selectedLearners.length
+                    ? learnerId === null
+                        ? `${selectedLearners.length} report card(s) prepared for ${data.class.class_name} - ${data.class.section}. Use Print Report Cards to print.`
+                        : `Report card for ${selectedLearners[0].surname} ${selectedLearners[0].othername} is ready to print.`
                     : 'No learners are registered in this class.';
             } catch (error) {
                 status.textContent = error.message || 'Unable to prepare report cards.';

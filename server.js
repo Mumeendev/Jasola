@@ -171,9 +171,11 @@ async function initializeDatabase() {
         section VARCHAR(100) NOT NULL,
         class_teacher VARCHAR(255) REFERENCES users(username),
         stream VARCHAR(20),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
         UNIQUE (class_name, section)
       );
       ALTER TABLE classes ADD COLUMN IF NOT EXISTS stream VARCHAR(20);
+      ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
       CREATE TABLE IF NOT EXISTS subjects (
         id SERIAL PRIMARY KEY,
@@ -559,18 +561,59 @@ app.get('/api/teachers', requireRole('admin'), async (req, res) => {
 
 app.get('/api/classes', async (req, res) => {
   try {
+    const includeArchived = req.user.role === 'admin' && req.query.includeArchived === '1';
     const result = req.user.role === 'teacher'
       ? await pool.query(
-        `SELECT DISTINCT c.id, c.class_name, c.section, c.class_teacher, c.stream
+        `SELECT DISTINCT c.id, c.class_name, c.section, c.class_teacher, c.stream, c.is_active
          FROM classes c JOIN allocations a ON a.class_id = c.id
-         WHERE a.teacher_username = $1 ORDER BY c.class_name, c.section`,
+         WHERE a.teacher_username = $1 AND c.is_active = TRUE ORDER BY c.class_name, c.section`,
         [req.user.username]
       )
-      : await pool.query('SELECT id, class_name, section, class_teacher, stream FROM classes ORDER BY class_name, section');
+      : await pool.query(
+        `SELECT id, class_name, section, class_teacher, stream, is_active
+         FROM classes ${includeArchived ? '' : 'WHERE is_active = TRUE'}
+         ORDER BY class_name, section`
+      );
     res.json(result.rows);
   } catch (err) {
     console.error('Loading classes failed:', err);
     res.status(500).json({ error: 'Unable to load classes.' });
+  }
+});
+
+app.delete('/api/classes/:id', requireRole('admin'), async (req, res) => {
+  const classId = Number(req.params.id);
+  if (!Number.isInteger(classId) || classId <= 0) {
+    return res.status(400).json({ error: 'Select a valid class.' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE classes SET is_active = FALSE WHERE id = $1 AND is_active = TRUE RETURNING id',
+      [classId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Active class not found.' });
+    res.json({ success: true, message: 'Class removed from active lists; learners and historical records were kept.' });
+  } catch (err) {
+    console.error('Removing class failed:', err);
+    res.status(500).json({ error: 'Unable to remove class.' });
+  }
+});
+
+app.put('/api/classes/:id/restore', requireRole('admin'), async (req, res) => {
+  const classId = Number(req.params.id);
+  if (!Number.isInteger(classId) || classId <= 0) {
+    return res.status(400).json({ error: 'Select a valid class.' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE classes SET is_active = TRUE WHERE id = $1 AND is_active = FALSE RETURNING id',
+      [classId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Archived class not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Restoring class failed:', err);
+    res.status(500).json({ error: 'Unable to restore class.' });
   }
 });
 
@@ -617,7 +660,7 @@ app.get('/api/teachers/:username/subjects', requireRole('admin'), async (req, re
     const result = await pool.query(
       `SELECT a.class_id, a.subject_id
        FROM allocations a JOIN subjects s ON s.id = a.subject_id
-       WHERE a.teacher_username = $1 AND s.is_active = TRUE
+       WHERE a.teacher_username = $1 AND s.is_active = TRUE AND c.is_active = TRUE
          AND a.subject_id IS NOT NULL AND a.class_id IS NOT NULL`,
       [req.params.username]
     );
@@ -660,7 +703,8 @@ app.get('/api/subjects', async (req, res) => {
          FROM subjects s
          JOIN allocations a ON a.subject_id = s.id
          JOIN classes c ON c.id = a.class_id
-         WHERE s.is_active = TRUE AND (s.stream IS NULL OR s.stream = c.stream)
+         WHERE s.is_active = TRUE AND c.is_active = TRUE
+           AND (s.stream IS NULL OR s.stream = c.stream)
          ORDER BY c.class_name, c.section, s.name`
       );
     res.json(result.rows.filter((subject) => isSubjectAllowedForClass(
@@ -719,6 +763,11 @@ app.get('/api/learners', requireRole('admin', 'teacher'), async (req, res) => {
     return res.status(400).json({ error: 'Select a valid class.' });
   }
   try {
+    const classExists = await pool.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
+    if (!classExists.rows.length) return res.status(404).json({ error: 'Active class not found.' });
     if (req.user.role === 'teacher') {
       const allocation = await pool.query(
         'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
@@ -749,8 +798,11 @@ app.post('/api/learners', requireRole('admin'), async (req, res) => {
     return res.status(400).json({ error: 'Learner name, gender, and a valid class are required.' });
   }
   try {
-    const classResult = await pool.query('SELECT class_name FROM classes WHERE id = $1', [classId]);
-    if (!classResult.rows.length) return res.status(400).json({ error: 'Select a valid class.' });
+    const classResult = await pool.query(
+      'SELECT class_name FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
+    if (!classResult.rows.length) return res.status(400).json({ error: 'Select an active class.' });
     await pool.query(
       `INSERT INTO learners (surname, othername, gender, class_name, class_id, admission_number, date_of_birth)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -800,7 +852,7 @@ app.get('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) =
       return res.status(403).json({ error: 'This subject is not allocated to the selected class and teacher.' });
     }
     const classResult = await pool.query(
-      'SELECT class_name, section, stream FROM classes WHERE id = $1',
+      'SELECT class_name, section, stream FROM classes WHERE id = $1 AND is_active = TRUE',
       [classId]
     );
     if (!classResult.rows.length) return res.status(404).json({ error: 'Class not found.' });
@@ -879,7 +931,10 @@ app.put('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) =
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'This subject is not allocated to the selected class and teacher.' });
     }
-    const classResult = await client.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
+    const classResult = await client.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     if (!classResult.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Class not found.' });
@@ -893,7 +948,10 @@ app.put('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) =
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'This subject has been archived and cannot receive new results.' });
     }
-    const classDetails = await client.query('SELECT class_name, stream FROM classes WHERE id = $1', [classId]);
+    const classDetails = await client.query(
+      'SELECT class_name, stream FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     const subjectDetails = await client.query('SELECT class_name, stream FROM subjects WHERE id = $1', [subjectId]);
     if (!isSubjectAllowedForClass(subjectDetails.rows[0], classDetails.rows[0])) {
       await client.query('ROLLBACK');
@@ -1062,7 +1120,10 @@ app.get('/api/learner-comments', requireRole('admin', 'teacher'), async (req, re
       );
       if (!allocation.rows.length) return res.status(403).json({ error: 'You are not assigned to this class.' });
     }
-    const classExists = await pool.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
+    const classExists = await pool.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     if (!classExists.rows.length) return res.status(404).json({ error: 'Class not found.' });
     const result = await pool.query(
       `SELECT l.id AS learner_id, l.surname, l.othername, l.admission_number,
@@ -1110,7 +1171,10 @@ app.put('/api/learner-comments', requireRole('admin', 'teacher'), async (req, re
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const classResult = await client.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
+    const classResult = await client.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     if (!classResult.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Class not found.' });
@@ -1169,7 +1233,10 @@ app.get('/api/learner-behaviors', requireRole('admin', 'teacher'), async (req, r
       );
       if (!allocation.rows.length) return res.status(403).json({ error: 'You are not assigned to this class.' });
     }
-    const classExists = await pool.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
+    const classExists = await pool.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     if (!classExists.rows.length) return res.status(404).json({ error: 'Class not found.' });
     const result = await pool.query(
       `SELECT l.id AS learner_id, l.surname, l.othername, l.admission_number,
@@ -1214,7 +1281,10 @@ app.put('/api/learner-behaviors', requireRole('admin', 'teacher'), async (req, r
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const classExists = await client.query('SELECT 1 FROM classes WHERE id = $1', [classId]);
+    const classExists = await client.query(
+      'SELECT 1 FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     if (!classExists.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Class not found.' });
@@ -1285,7 +1355,7 @@ app.get('/api/class-gradebook', requireRole('admin', 'teacher'), async (req, res
     }
 
     const classResult = await pool.query(
-      'SELECT id, class_name, section, stream FROM classes WHERE id = $1',
+      'SELECT id, class_name, section, stream FROM classes WHERE id = $1 AND is_active = TRUE',
       [classId]
     );
     if (!classResult.rows.length) return res.status(404).json({ error: 'Class not found.' });
@@ -1392,7 +1462,10 @@ app.post('/api/allocate', requireRole('admin'), async (req, res) => {
     const subject = await pool.query('SELECT id, name, class_name, stream, is_active FROM subjects WHERE id = $1', [Number(subjectId)]);
     if (!subject.rows.length) return res.status(404).json({ error: 'Subject not found.' });
     if (!subject.rows[0].is_active) return res.status(409).json({ error: 'This subject has been archived.' });
-    const classResult = await pool.query('SELECT class_name, stream FROM classes WHERE id = $1', [classId]);
+    const classResult = await pool.query(
+      'SELECT class_name, stream FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     if (!classResult.rows.length) return res.status(404).json({ error: 'Class not found.' });
     if (!isSubjectAllowedForClass(subject.rows[0], classResult.rows[0])) {
       return res.status(400).json({ error: 'This subject is not available for the selected class or stream.' });
@@ -1433,7 +1506,10 @@ app.put('/api/allocate', requireRole('admin'), async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Teacher not found.' });
     }
-    const classResult = await client.query('SELECT class_name, stream FROM classes WHERE id = $1', [classId]);
+    const classResult = await client.query(
+      'SELECT class_name, stream FROM classes WHERE id = $1 AND is_active = TRUE',
+      [classId]
+    );
     if (!classResult.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Class not found.' });

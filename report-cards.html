@@ -15,6 +15,11 @@
         #status { color:#4a5568; }
         #comments-panel { margin-top:1.5rem; padding:1rem; border:1px solid #cbd5e0; border-radius:6px; }
         #comments-panel[hidden] { display:none; }
+        #learner-picker { margin-top:1rem; padding:1rem; border:1px solid #cbd5e0; border-radius:6px; }
+        #learner-picker[hidden] { display:none; }
+        .learner-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.65rem; }
+        .learner-choice { width:100%; min-height:48px; margin:0; text-align:left; background:#fff; color:#1a365d; border:1px solid #a0aec0; overflow-wrap:anywhere; }
+        .learner-choice:hover,.learner-choice:focus-visible { background:#ebf8ff; border-color:#2c5282; }
         .comment-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,3fr); gap:.75rem; align-items:start; padding:.75rem 0; border-bottom:1px solid #e2e8f0; }
         .comment-row textarea { width:100%; min-height:70px; padding:.65rem; border:1px solid #cbd5e0; border-radius:5px; font:inherit; }
         .comment-name { font-weight:600; }
@@ -25,7 +30,7 @@
 <body>
     <main>
         <h1>Print Class Report Cards</h1>
-        <p>Choose the class, term, and session to prepare a printable report card for every learner.</p>
+        <p>Choose a class, term, and session to view the learners in that class. Select a learner to open and print their report card.</p>
         <form id="report-form">
             <label for="class">Class and section</label>
             <select id="class" required><option value="">Loading classes…</option></select>
@@ -44,11 +49,15 @@
                 <option value="2026/2027"></option>
                 <option value="2027/2028"></option>
             </datalist>
-            <button type="submit">Prepare Report Cards</button>
+            <button type="submit" id="show-learners-button">Show Learners</button>
             <button type="button" id="load-comments-button">Principal Comments</button>
             <a class="button" id="back-link" href="dashboard.html">Back to Dashboard</a>
         </form>
         <p id="status" role="status"></p>
+        <section id="learner-picker" hidden>
+            <h2>Select a learner</h2>
+            <div id="learner-list" class="learner-list"></div>
+        </section>
         <section id="comments-panel" hidden>
             <h2 id="comments-title">Principal Comments</h2>
             <p id="comments-description">Add or edit a principal comment for each learner.</p>
@@ -72,6 +81,66 @@
 
         const commentPanel = document.getElementById('comments-panel');
         const commentsList = document.getElementById('comments-list');
+        const learnerPicker = document.getElementById('learner-picker');
+        const learnerList = document.getElementById('learner-list');
+        const reportForm = document.getElementById('report-form');
+
+        function clearLearnerList() {
+            learnerPicker.hidden = true;
+            learnerList.replaceChildren();
+        }
+
+        reportForm.addEventListener('input', clearLearnerList);
+        reportForm.addEventListener('change', clearLearnerList);
+
+        async function showLearners() {
+            const classId = document.getElementById('class').value;
+            const term = document.getElementById('term').value;
+            const sessionYear = document.getElementById('session').value.trim();
+            if (!classId || !term || !sessionYear) {
+                document.getElementById('status').textContent =
+                    'Select a class, term, and session before showing learners.';
+                return;
+            }
+
+            const button = document.getElementById('show-learners-button');
+            button.disabled = true;
+            clearLearnerList();
+            document.getElementById('status').textContent = 'Loading learners…';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const query = new URLSearchParams({ classId });
+                const response = await fetch(`${baseUrl}/api/learners?${query}`);
+                const learners = await response.json();
+                if (!response.ok) throw new Error(learners.error || 'Unable to load learners.');
+
+                learners.forEach(learner => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'learner-choice';
+                    button.textContent = `${learner.surname} ${learner.othername}` +
+                        (learner.admission_number ? ` (${learner.admission_number})` : '');
+                    button.addEventListener('click', () => {
+                        const reportQuery = new URLSearchParams({
+                            classId,
+                            term,
+                            sessionYear,
+                            learnerId: String(learner.id)
+                        });
+                        window.location.href = `report-book.html?${reportQuery}`;
+                    });
+                    learnerList.appendChild(button);
+                });
+                learnerPicker.hidden = false;
+                document.getElementById('status').textContent = learners.length
+                    ? `${learners.length} learner(s) found. Select a name to view and print that report card.`
+                    : 'No learners are registered in this class.';
+            } catch (error) {
+                document.getElementById('status').textContent = error.message || 'Unable to load learners.';
+            } finally {
+                button.disabled = false;
+            }
+        }
 
         async function loadLearnerComments() {
             const classId = document.getElementById('class').value;
@@ -174,14 +243,9 @@
             }
         }
 
-        document.getElementById('report-form').addEventListener('submit', event => {
+        reportForm.addEventListener('submit', event => {
             event.preventDefault();
-            const query = new URLSearchParams({
-                classId: document.getElementById('class').value,
-                term: document.getElementById('term').value,
-                sessionYear: document.getElementById('session').value
-            });
-            window.location.href = `report-book.html?${query}`;
+            showLearners();
         });
         loadClasses();
     </script>

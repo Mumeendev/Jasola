@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Classes - Jasola Model School</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 1.5rem; background: #edf2f7; color: #1a202c; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        main { max-width: 1000px; margin: 0 auto; padding: 1.5rem; background: #fff; border-radius: 10px; box-shadow: 0 4px 16px #00000012; }
+        header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        h1 { margin: 0; color: #1a365d; }
+        .button, button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .65rem 1rem; border: 0; border-radius: 5px; background: #2c5282; color: #fff; font: inherit; text-decoration: none; cursor: pointer; }
+        .remove { background: #c53030; }
+        .restore { background: #2f855a; }
+        #status { min-height: 1.5rem; color: #4a5568; }
+        .table-wrap { width: 100%; overflow-x: auto; }
+        table { width: 100%; min-width: 620px; border-collapse: collapse; }
+        th, td { padding: .75rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        th { background: #2c5282; color: #fff; }
+        @media screen and (max-width: 600px) {
+            body { padding: .5rem; }
+            main { padding: .75rem; }
+            header { align-items: stretch; }
+            header .button { width: 100%; }
+        }
+    </style>
+    <link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+    <main>
+        <header>
+            <h1>Manage Classes</h1>
+            <a class="button" href="add-class.html">Add Class</a>
+        </header>
+        <p>Remove a class from active lists without deleting learners or historical results. Archived classes can be restored.</p>
+        <p id="status" role="status">Loading classes…</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Class</th>
+                        <th>Section</th>
+                        <th>Stream</th>
+                        <th>Class teacher</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="class-list"></tbody>
+            </table>
+        </div>
+        <p><a href="dashboard.html">Back to Dashboard</a></p>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        const classList = document.getElementById('class-list');
+        const statusMessage = document.getElementById('status');
+
+        async function loadClasses() {
+            statusMessage.textContent = 'Loading classes…';
+            classList.replaceChildren();
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/classes?includeArchived=1`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load classes.');
+
+                classes.forEach(classRow => {
+                    const row = document.createElement('tr');
+                    [
+                        classRow.class_name,
+                        classRow.section,
+                        classRow.stream || '—',
+                        classRow.class_teacher || '—',
+                        classRow.is_active ? 'Active' : 'Removed'
+                    ].forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    });
+
+                    const actionCell = document.createElement('td');
+                    const actionButton = document.createElement('button');
+                    actionButton.type = 'button';
+                    actionButton.className = classRow.is_active ? 'remove' : 'restore';
+                    actionButton.textContent = classRow.is_active ? 'Remove class' : 'Restore class';
+                    actionButton.addEventListener('click', () => updateClassStatus(classRow));
+                    actionCell.appendChild(actionButton);
+                    row.appendChild(actionCell);
+                    classList.appendChild(row);
+                });
+
+                statusMessage.textContent = classes.length
+                    ? `${classes.filter(classRow => classRow.is_active).length} active class(es); removed classes are retained for history.`
+                    : 'No classes have been added.';
+            } catch (error) {
+                statusMessage.textContent = error.message || 'Unable to load classes.';
+            }
+        }
+
+        async function updateClassStatus(classRow) {
+            const name = `${classRow.class_name} - ${classRow.section}`;
+            if (classRow.is_active &&
+                !window.confirm(`Remove ${name} from active class lists? Learners and historical records will be kept.`)) {
+                return;
+            }
+
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const endpoint = classRow.is_active
+                    ? `${baseUrl}/api/classes/${encodeURIComponent(classRow.id)}`
+                    : `${baseUrl}/api/classes/${encodeURIComponent(classRow.id)}/restore`;
+                const response = await fetch(endpoint, { method: classRow.is_active ? 'DELETE' : 'PUT' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to update class.');
+                statusMessage.textContent = classRow.is_active
+                    ? `${name} was removed from active lists. Its records were kept.`
+                    : `${name} was restored.`;
+                await loadClasses();
+            } catch (error) {
+                statusMessage.textContent = error.message || 'Unable to update class.';
+            }
+        }
+
+        if (sessionStorage.getItem('role') !== 'admin') {
+            statusMessage.textContent = 'Only administrators can manage classes.';
+        } else {
+            loadClasses();
+        }
+    </script>
+</body>
+</html>

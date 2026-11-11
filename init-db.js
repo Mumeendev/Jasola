@@ -44,10 +44,12 @@ async function init() {
         section VARCHAR(100) NOT NULL,
         class_teacher VARCHAR(255) REFERENCES users(username),
         stream VARCHAR(20),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
         UNIQUE (class_name, section)
       );
     `);
     await client.query('ALTER TABLE classes ADD COLUMN IF NOT EXISTS stream VARCHAR(20);');
+    await client.query('ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;');
 
     // Create Subjects table (refined)
     await client.query(`
