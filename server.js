@@ -669,6 +669,21 @@ app.post('/api/learners', requireRole('admin'), async (req, res) => {
   }
 });
 
+app.delete('/api/learners/:id', requireRole('admin'), async (req, res) => {
+  const learnerId = Number(req.params.id);
+  if (!Number.isInteger(learnerId) || learnerId <= 0) {
+    return res.status(400).json({ error: 'Select a valid learner.' });
+  }
+  try {
+    const result = await pool.query('DELETE FROM learners WHERE id = $1 RETURNING id', [learnerId]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Learner not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Deleting learner failed:', err);
+    res.status(500).json({ error: 'Unable to remove learner.' });
+  }
+});
+
 app.get('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) => {
   const classId = Number(req.query.classId);
   const subjectId = Number(req.query.subjectId);

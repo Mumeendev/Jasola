@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Learners - Jasola Model School</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin:0; padding:2rem; background:#edf2f7; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { max-width:1000px; margin:0 auto; padding:2rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000014; }
+        header,.actions { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+        h1 { margin:.25rem 0; color:#1a365d; }
+        label { display:block; margin:1.5rem 0 1rem; font-weight:600; }
+        select { display:block; width:100%; max-width:450px; margin-top:.5rem; padding:.7rem; border:1px solid #a0aec0; border-radius:5px; font:inherit; }
+        button,.button { padding:.65rem .9rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; font:inherit; }
+        button.remove { background:#c53030; }
+        button:disabled { opacity:.6; cursor:wait; }
+        #status { min-height:1.5rem; color:#4a5568; }
+        .table-wrap { overflow:auto; }
+        table { width:100%; border-collapse:collapse; }
+        th,td { padding:.75rem; border-bottom:1px solid #e2e8f0; text-align:left; }
+        th { background:#2c5282; color:#fff; }
+        .empty { text-align:center; color:#718096; padding:2rem; }
+        @media (max-width:600px) { body { padding:1rem; } main { padding:1rem; } }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <h1>Manage Learners</h1>
+                <p>View learners by class and remove registrations.</p>
+            </div>
+            <div class="actions">
+                <a class="button" href="add-learner.html">Add Learner</a>
+                <a class="button" href="dashboard.html">Dashboard</a>
+            </div>
+        </header>
+        <label for="class">Class and section
+            <select id="class"><option value="">Loading classes...</option></select>
+        </label>
+        <p id="status" role="status"></p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Surname</th><th>Other name</th><th>Admission number</th><th>Action</th></tr>
+                </thead>
+                <tbody id="learners"></tbody>
+            </table>
+        </div>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        const classSelect = document.getElementById('class');
+        const learnerList = document.getElementById('learners');
+        const status = document.getElementById('status');
+
+        if (sessionStorage.getItem('role') !== 'admin') {
+            window.location.replace('dashboard.html');
+        }
+
+        async function loadLearners() {
+            learnerList.replaceChildren();
+            if (!classSelect.value) return;
+            status.textContent = 'Loading learners...';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/learners?classId=${encodeURIComponent(classSelect.value)}`);
+                const learners = await response.json();
+                if (!response.ok) throw new Error(learners.error || 'Unable to load learners.');
+                if (!learners.length) {
+                    learnerList.innerHTML = '<tr><td class="empty" colspan="4">No learners are registered in this class.</td></tr>';
+                    status.textContent = '';
+                    return;
+                }
+                learners.forEach(learner => {
+                    const row = document.createElement('tr');
+                    [learner.surname, learner.othername, learner.admission_number || '-'].forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    });
+                    const actionCell = document.createElement('td');
+                    const removeButton = document.createElement('button');
+                    removeButton.type = 'button';
+                    removeButton.className = 'remove';
+                    removeButton.textContent = 'Remove';
+                    removeButton.addEventListener('click', () => removeLearner(learner));
+                    actionCell.appendChild(removeButton);
+                    row.appendChild(actionCell);
+                    learnerList.appendChild(row);
+                });
+                status.textContent = `${learners.length} learner(s) in this class.`;
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load learners.';
+            }
+        }
+
+        async function removeLearner(learner) {
+            const fullName = `${learner.surname} ${learner.othername}`;
+            if (!confirm(`Remove ${fullName} from the school? This also deletes their saved results and comments.`)) return;
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/learners/${encodeURIComponent(learner.id)}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to remove learner.');
+                status.textContent = `${fullName} was removed.`;
+                await loadLearners();
+            } catch (error) {
+                status.textContent = error.message || 'Unable to remove learner.';
+            }
+        }
+
+        async function loadClasses() {
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/classes`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load classes.');
+                classSelect.replaceChildren(new Option('Select class and section', ''));
+                classes.forEach(item => classSelect.add(new Option(`${item.class_name} - ${item.section}`, item.id)));
+                if (!classes.length) {
+                    classSelect.replaceChildren(new Option('No classes found', ''));
+                    status.textContent = 'Create a class before managing learners.';
+                }
+            } catch (error) {
+                classSelect.replaceChildren(new Option('Unable to load classes', ''));
+                status.textContent = error.message || 'Unable to load classes.';
+            }
+        }
+
+        classSelect.addEventListener('change', loadLearners);
+        loadClasses();
+    </script>
+</body>
+</html>

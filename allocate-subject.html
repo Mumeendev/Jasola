@@ -15,6 +15,9 @@
         .subjects { max-height:250px; overflow:auto; padding:1rem; border:1px solid #cbd5e0; border-radius:5px; }
         .subjects label { display:flex; gap:.7rem; align-items:center; margin:.4rem 0; cursor:pointer; }
         .subjects input { width:18px; height:18px; }
+        .form-actions { display:flex; gap:.75rem; }
+        .form-actions button { flex:1; }
+        .form-actions .clear { background:#c53030; }
         #status { min-height:1.5rem; }
         #credentials { padding:1rem; background:#ebf8ff; border-radius:5px; overflow-wrap:anywhere; }
         a { color:#2c5282; }
@@ -31,7 +34,11 @@
             <select id="class" required><option value="">Loading classes…</option></select>
             <label>Subjects allocated for this class</label>
             <div class="subjects" id="subjects"><p>Select a teacher and class.</p></div>
-            <button type="submit">Save Class and Subject Allocation</button>
+            <p class="helper">Uncheck a subject and save to remove that allocation.</p>
+            <div class="form-actions">
+                <button type="submit">Save Allocation</button>
+                <button type="button" class="clear" id="clear-allocations">Remove All</button>
+            </div>
         </form>
         <p id="status" role="status"></p>
         <section id="credentials" hidden></section>
@@ -176,13 +183,17 @@
 
         document.getElementById('allocation-form').addEventListener('submit', async event => {
             event.preventDefault();
-            const teacherUsername = teacherSelect.value;
-            const classId = Number(classSelect.value);
             const subjectIds = [...document.querySelectorAll('input[name="subjectId"]:checked')]
                 .map(input => Number(input.value));
+            await saveAllocation(subjectIds);
+        });
+
+        async function saveAllocation(subjectIds) {
+            const teacherUsername = teacherSelect.value;
+            const classId = Number(classSelect.value);
             if (!teacherUsername || !classId) {
                 status.textContent = 'Choose a teacher and class.';
-                return;
+                return false;
             }
             try {
                 const baseUrl = await apiBase();
@@ -200,9 +211,20 @@
                     credentials.hidden = true;
                     credentials.replaceChildren();
                 }
+                return true;
             } catch (error) {
                 status.textContent = error.message || 'Unable to save allocation.';
+                return false;
             }
+        }
+
+        document.getElementById('clear-allocations').addEventListener('click', async () => {
+            if (!teacherSelect.value || !classSelect.value) {
+                status.textContent = 'Choose a teacher and class.';
+                return;
+            }
+            if (!confirm(`Remove every subject allocation for ${teacherSelect.value} in this class?`)) return;
+            if (await saveAllocation([])) renderSubjects([]);
         });
 
         async function createTeacherLogin(username) {
