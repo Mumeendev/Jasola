@@ -581,6 +581,27 @@ app.get('/api/teachers', requireRole('admin'), async (req, res) => {
   }
 });
 
+app.get('/api/teacher-allocations', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT u.username, u.surname, u.othername,
+              c.id AS class_id, c.class_name, c.section, c.stream AS class_stream,
+              s.id AS subject_id, s.name AS subject_name, s.stream AS subject_stream
+       FROM allocations a
+       JOIN users u ON u.username = a.teacher_username AND u.role = 'teacher'
+       JOIN classes c ON c.id = a.class_id AND c.is_active = TRUE
+       JOIN subjects s ON s.id = a.subject_id AND s.is_active = TRUE
+       WHERE a.class_id IS NOT NULL AND a.subject_id IS NOT NULL
+         AND (s.stream IS NULL OR s.stream = c.stream)
+       ORDER BY u.surname, u.othername, c.class_name, c.section, s.name`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Loading teacher allocations failed:', err);
+    res.status(500).json({ error: 'Unable to load teacher allocations.' });
+  }
+});
+
 app.get('/api/classes', async (req, res) => {
   try {
     const includeArchived = req.user.role === 'admin' && req.query.includeArchived === '1';
@@ -682,6 +703,7 @@ app.get('/api/teachers/:username/subjects', requireRole('admin'), async (req, re
     const result = await pool.query(
       `SELECT a.class_id, a.subject_id
        FROM allocations a JOIN subjects s ON s.id = a.subject_id
+       JOIN classes c ON c.id = a.class_id
        WHERE a.teacher_username = $1 AND s.is_active = TRUE AND c.is_active = TRUE
          AND a.subject_id IS NOT NULL AND a.class_id IS NOT NULL`,
       [req.params.username]

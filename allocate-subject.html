@@ -7,7 +7,7 @@
     <style>
         * { box-sizing: border-box; }
         body { min-height:100vh; margin:0; display:grid; place-items:center; padding:2rem; background:#f3f6fa; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
-        main { width:100%; max-width:650px; padding:2rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000014; }
+        main { width:100%; max-width:1000px; padding:2rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000014; }
         h1 { margin-top:0; }
         label { display:block; margin:1.2rem 0 .4rem; font-weight:600; }
         select, button { width:100%; padding:.8rem; border:1px solid #cbd5e0; border-radius:5px; font-size:1rem; }
@@ -20,6 +20,15 @@
         .form-actions .clear { background:#c53030; }
         #status { min-height:1.5rem; }
         #credentials { padding:1rem; background:#ebf8ff; border-radius:5px; overflow-wrap:anywhere; }
+        .allocation-overview { margin:2rem 0 1rem; }
+        .allocation-overview header { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+        .allocation-overview h2 { margin-bottom:.25rem; }
+        .allocation-table-wrap { overflow:auto; border:1px solid #cbd5e0; border-radius:5px; }
+        .allocation-table { width:100%; border-collapse:collapse; }
+        .allocation-table th,.allocation-table td { padding:.7rem; border-bottom:1px solid #cbd5e0; text-align:left; vertical-align:top; }
+        .allocation-table th { background:#edf2f7; }
+        .allocation-table button,.allocation-overview header button { width:auto; margin:0; padding:.55rem .8rem; }
+        #allocation-list-status { min-height:1.5rem; color:#4a5568; }
         a { color:#2c5282; }
     </style>
     <link rel="stylesheet" href="responsive.css">
@@ -43,6 +52,24 @@
         </form>
         <p id="status" role="status"></p>
         <section id="credentials" hidden></section>
+        <section class="allocation-overview" aria-labelledby="allocation-overview-title">
+            <header>
+                <div>
+                    <h2 id="allocation-overview-title">Current Teacher Allocations</h2>
+                    <p>Review teachers, their classes, and allocated subjects. Select Edit to change an allocation.</p>
+                </div>
+                <button type="button" id="refresh-allocations">Refresh</button>
+            </header>
+            <p id="allocation-list-status" role="status">Loading allocations…</p>
+            <div class="allocation-table-wrap">
+                <table class="allocation-table">
+                    <thead>
+                        <tr><th>Teacher</th><th>Class</th><th>Allocated subjects</th><th>Action</th></tr>
+                    </thead>
+                    <tbody id="allocation-list"></tbody>
+                </table>
+            </div>
+        </section>
         <a href="dashboard.html">Back to Admin Dashboard</a>
     </main>
     <script src="auth.js"></script>
@@ -55,6 +82,8 @@
         const subjectList = document.getElementById('subjects');
         const status = document.getElementById('status');
         const credentials = document.getElementById('credentials');
+        const allocationList = document.getElementById('allocation-list');
+        const allocationListStatus = document.getElementById('allocation-list-status');
 
         async function apiBase() {
             return window.resolvePortalApiBase();
@@ -95,6 +124,64 @@
                 renderSubjects([]);
             } catch (error) {
                 status.textContent = error.message || 'Unable to load allocation options.';
+            }
+        }
+
+        async function loadAllocationList() {
+            allocationList.replaceChildren();
+            allocationListStatus.textContent = 'Loading allocations…';
+            try {
+                const baseUrl = await apiBase();
+                const response = await fetch(`${baseUrl}/api/teacher-allocations`);
+                const rows = await response.json();
+                if (!response.ok) throw new Error(rows.error || 'Unable to load teacher allocations.');
+                const grouped = new Map();
+                rows.forEach(item => {
+                    const key = `${item.username}:${item.class_id}`;
+                    if (!grouped.has(key)) {
+                        grouped.set(key, { ...item, subjects: [] });
+                    }
+                    const group = grouped.get(key);
+                    group.subjects.push(item.subject_name +
+                        (item.subject_stream ? ` (${item.subject_stream})` : ''));
+                });
+                if (!grouped.size) {
+                    const row = document.createElement('tr');
+                    const cell = document.createElement('td');
+                    cell.colSpan = 4;
+                    cell.textContent = 'No teacher subject allocations found.';
+                    row.appendChild(cell);
+                    allocationList.appendChild(row);
+                    allocationListStatus.textContent = '';
+                    return;
+                }
+                grouped.forEach(item => {
+                    const row = document.createElement('tr');
+                    const teacherCell = document.createElement('td');
+                    teacherCell.textContent =
+                        `${item.surname} ${item.othername} (@${item.username})`;
+                    const classCell = document.createElement('td');
+                    classCell.textContent = `${item.class_name} - ${item.section}` +
+                        (item.class_stream ? ` (${item.class_stream})` : '');
+                    const subjectsCell = document.createElement('td');
+                    subjectsCell.textContent = item.subjects.join(', ');
+                    const actionCell = document.createElement('td');
+                    const editButton = document.createElement('button');
+                    editButton.type = 'button';
+                    editButton.textContent = 'Edit';
+                    editButton.addEventListener('click', () => {
+                        teacherSelect.value = item.username;
+                        classSelect.value = String(item.class_id);
+                        document.getElementById('allocation-form').scrollIntoView({ behavior: 'smooth' });
+                        loadCurrentAllocations();
+                    });
+                    actionCell.appendChild(editButton);
+                    row.append(teacherCell, classCell, subjectsCell, actionCell);
+                    allocationList.appendChild(row);
+                });
+                allocationListStatus.textContent = `${grouped.size} teacher/class allocation(s).`;
+            } catch (error) {
+                allocationListStatus.textContent = error.message || 'Unable to load teacher allocations.';
             }
         }
 
@@ -207,6 +294,7 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Unable to save allocation.');
                 status.textContent = `Saved ${subjectIds.length} subject(s) for ${teacherUsername} in this class.`;
+                await loadAllocationList();
                 if (subjectIds.length) {
                     showTeacherLoginButton(teacherUsername);
                 } else {
@@ -228,6 +316,7 @@
             if (!confirm(`Remove every subject allocation for ${teacherSelect.value} in this class?`)) return;
             if (await saveAllocation([])) renderSubjects([]);
         });
+        document.getElementById('refresh-allocations').addEventListener('click', loadAllocationList);
 
         async function createTeacherLogin(username) {
             if (!confirm(`Create or reset ${username}'s login? Their current password will stop working.`)) return;
@@ -252,7 +341,7 @@
 
         teacherSelect.addEventListener('change', loadCurrentAllocations);
         classSelect.addEventListener('change', loadCurrentAllocations);
-        loadOptions();
+        loadOptions().then(loadAllocationList);
     </script>
 </body>
 </html>
