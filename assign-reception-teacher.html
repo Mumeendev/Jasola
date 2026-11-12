@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assign Reception Teacher - Jasola Model School</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; min-height:100vh; display:grid; place-items:center; padding:2rem; background:#edf2f7; color:#1a202c; font-family:'Segoe UI',Tahoma,sans-serif; }
+        main { width:100%; max-width:620px; padding:2rem; background:#fff; border-radius:10px; box-shadow:0 4px 16px #00000014; }
+        h1 { margin-top:0; color:#1a365d; }
+        label { display:block; margin:1.2rem 0 .4rem; font-weight:600; }
+        select { width:100%; padding:.8rem; border:1px solid #cbd5e0; border-radius:5px; font:inherit; }
+        button,.button { display:inline-block; margin:1rem .5rem 0 0; padding:.8rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; }
+        button:disabled { opacity:.6; cursor:wait; }
+        #status { min-height:1.5rem; }
+    </style>
+    <link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+    <main>
+        <h1>Assign Reception Teacher</h1>
+        <p>Choose the Reception class and the teacher responsible for its Reception marks.</p>
+        <form id="assignment-form">
+            <label for="class">Reception class</label>
+            <select id="class" required><option value="">Loading Reception classes…</option></select>
+            <label for="teacher">Class teacher</label>
+            <select id="teacher" required><option value="">Loading teachers…</option></select>
+            <button type="submit" id="save-button">Save Assignment</button>
+            <a class="button" href="more-options.html">Back to More Options</a>
+        </form>
+        <p id="status" role="status"></p>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        if (sessionStorage.getItem('role') !== 'admin') {
+            window.location.replace('login.html');
+        }
+
+        const classSelect = document.getElementById('class');
+        const teacherSelect = document.getElementById('teacher');
+        const status = document.getElementById('status');
+        let receptionClasses = [];
+
+        async function loadOptions() {
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const [classesResponse, teachersResponse] = await Promise.all([
+                    fetch(`${baseUrl}/api/reception/classes`),
+                    fetch(`${baseUrl}/api/teachers`)
+                ]);
+                const [classes, teachers] = await Promise.all([
+                    classesResponse.json(), teachersResponse.json()
+                ]);
+                if (!classesResponse.ok) throw new Error(classes.error || 'Unable to load Reception classes.');
+                if (!teachersResponse.ok) throw new Error(teachers.error || 'Unable to load teachers.');
+                receptionClasses = classes;
+                classSelect.innerHTML = '<option value="">Select Reception class</option>';
+                classes.forEach(item => classSelect.add(new Option(
+                    `${item.class_name} - ${item.section}`, item.id
+                )));
+                teacherSelect.innerHTML = '<option value="">Select teacher</option>';
+                teachers.forEach(item => teacherSelect.add(new Option(
+                    `${item.surname} ${item.othername} (@${item.username})`, item.username
+                )));
+                if (!classes.length) status.textContent = 'Add a class whose name includes “Reception” first.';
+                if (!teachers.length) status.textContent = 'Add a teacher account before assigning the class.';
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load assignment options.';
+                classSelect.innerHTML = '<option value="">Unable to load classes</option>';
+                teacherSelect.innerHTML = '<option value="">Unable to load teachers</option>';
+            }
+        }
+
+        classSelect.addEventListener('change', () => {
+            const selectedClass = receptionClasses.find(item => Number(item.id) === Number(classSelect.value));
+            teacherSelect.value = selectedClass ? selectedClass.class_teacher || '' : '';
+        });
+
+        document.getElementById('assignment-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            const button = document.getElementById('save-button');
+            button.disabled = true;
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(
+                    `${baseUrl}/api/reception/classes/${encodeURIComponent(classSelect.value)}/teacher`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ teacherUsername: teacherSelect.value })
+                    }
+                );
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to assign the Reception teacher.');
+                const selectedClass = receptionClasses.find(item => Number(item.id) === Number(data.class.id));
+                if (selectedClass) selectedClass.class_teacher = data.class.class_teacher;
+                status.textContent =
+                    `Assigned ${data.class.class_teacher} to ${data.class.class_name} - ${data.class.section}.`;
+            } catch (error) {
+                status.textContent = error.message || 'Unable to assign the Reception teacher.';
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+        loadOptions();
+    </script>
+</body>
+</html>

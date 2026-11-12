@@ -26,13 +26,32 @@
             <a class="option" href="behavioral-skills.html"><h2>Behavioral Traits &amp; Attendance</h2><p>Record affective and psychomotor traits, plus term attendance.</p></a>
             <a class="option admin-option" href="view-users.html"><h2>Manage Users</h2><p>Remove non-administrator accounts.</p></a>
             <a class="option admin-option" href="view-subjects.html"><h2>Manage Subjects</h2><p>Archive subjects without deleting saved results.</p></a>
+            <a class="option reception-option" href="reception-print.html" hidden><h2>Print Reception Results</h2><p>Print the Reception class mark sheet for a term and session.</p></a>
+            <a class="option reception-option" href="reception-upload.html" hidden><h2>Upload Reception Results</h2><p>Mark each Reception subject from 1 to 5.</p></a>
+            <a class="option admin-option" href="assign-reception-teacher.html"><h2>Assign Reception Teacher</h2><p>Choose the class teacher who can upload and print Reception results.</p></a>
         </section>
     </main>
     <script src="auth.js"></script>
     <script>
-        if (sessionStorage.getItem('role') === 'teacher') {
+        const role = sessionStorage.getItem('role');
+        if (role === 'teacher') {
             document.getElementById('back-link').href = 'teacher-dashboard.html';
             document.querySelectorAll('.admin-option').forEach(option => option.hidden = true);
+            (async () => {
+                try {
+                    const baseUrl = await window.resolvePortalApiBase();
+                    const response = await fetch(`${baseUrl}/api/reception/classes`);
+                    const classes = await response.json();
+                    if (!response.ok) throw new Error(classes.error || 'Unable to load Reception assignments.');
+                    if (classes.length) {
+                        document.querySelectorAll('.reception-option').forEach(option => option.hidden = false);
+                    }
+                } catch (error) {
+                    console.error('Loading Reception options failed:', error);
+                }
+            })();
+        } else if (role === 'admin') {
+            document.querySelectorAll('.reception-option').forEach(option => option.hidden = false);
         }
     </script>
 </body>

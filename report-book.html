@@ -12,16 +12,20 @@
         .toolbar button,.toolbar a { padding:.7rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; text-decoration:none; cursor:pointer; }
         #status { color:#4a5568; }
         .report-card { min-height:250mm; margin:0 auto 1.5rem; padding:12mm; background:#fff; border:1px solid #cbd5e0; box-shadow:0 3px 12px #00000012; }
-        .school-header { text-align:center; border-bottom:3px double #1a365d; padding-bottom:.7rem; }
+        .school-header { text-align:center; border-bottom:3px double #2c5282; padding-bottom:.7rem; }
         .school-header h1 { margin:.2rem; color:#1a365d; font-size:22pt; letter-spacing:.06em; }
         .school-header p { margin:.2rem; font-size:10pt; color:#4a5568; }
-        .school-header .school-levels { font-weight:700; letter-spacing:.08em; color:#2c5282; }
+        .school-header .school-levels { display:flex; justify-content:center; align-items:center; gap:.7rem; font-weight:700; letter-spacing:.08em; color:#2c5282; }
+        .school-header .school-levels span + span { padding-left:.7rem; border-left:2px solid #2c5282; }
         .school-header .school-address { font-size:9pt; }
-        .school-brand { display:flex; align-items:center; justify-content:center; gap:1rem; }
+        .school-brand { display:flex; flex-direction:column; align-items:center; gap:.3rem; }
         .school-logo { width:82px; height:82px; object-fit:contain; }
         .report-title { margin:1rem 0; text-align:center; text-transform:uppercase; letter-spacing:.12em; }
         .student-details { display:grid; grid-template-columns:2fr 1fr 1fr; gap:.55rem 1rem; margin:1rem 0; padding:.8rem; border:1px solid #a0aec0; background:#f7fafc; }
         .student-details strong { color:#2d3748; }
+        .student-attendance { grid-column:3; grid-row:2; }
+        .student-attendance table { margin-top:.3rem; font-size:8pt; }
+        .student-attendance th,.student-attendance td { padding:.2rem .3rem; }
         table { width:100%; border-collapse:collapse; font-size:10pt; }
         th,td { padding:.48rem; border:1px solid #718096; text-align:center; }
         th { background:#e2e8f0; }
@@ -32,7 +36,9 @@
         .remark { margin:.8rem 0; padding:.6rem; border:1px solid #a0aec0; min-height:2.5rem; }
         .behavior-panel { margin:1rem 0; }
         .behavior-panel h3 { margin:.5rem 0; }
-        .behavior-panel table { font-size:9pt; }
+        .behavior-groups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; }
+        .behavior-group h4 { margin:.4rem 0; color:#1a365d; }
+        .behavior-group table { font-size:9pt; }
         .signatures { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; margin-top:2rem; text-align:center; }
         .signatures div { padding-top:.45rem; border-top:1px solid #4a5568; font-size:9pt; }
         .grade-key { margin-top:1rem; color:#4a5568; font-size:8.5pt; }
@@ -52,9 +58,11 @@
             body { padding:.5rem; }
             .report-card { padding:1rem; }
             .student-details { grid-template-columns:1fr 1fr; }
+            .student-attendance { grid-column:2; grid-row:auto; }
             .summary { grid-template-columns:1fr 1fr; }
+            .behavior-groups { grid-template-columns:1fr; }
             .school-logo { width:62px; height:62px; }
-            .school-brand { gap:.5rem; }
+            .school-brand { gap:.3rem; }
             .school-header h1 { font-size:16pt; }
         }
     </style>
@@ -114,7 +122,7 @@
         }
 
         function makeReport(learner, subjects, scoresByKey, commentsByLearner, behaviorsByLearner,
-            behaviorSkillGroups, attendanceByLearner, positionsBySubject, classInfo, rank, scoredCount,
+            behaviorSkillGroups, attendanceByLearner, positionsBySubject, classInfo,
             classHighest, classLowest) {
             const card = document.createElement('article');
             card.className = 'report-card';
@@ -128,15 +136,22 @@
             logo.alt = 'Jasola Model School logo';
             const schoolName = document.createElement('h1');
             schoolName.textContent = 'JASOLA MODEL SCHOOL';
+            const schoolPhone = document.createElement('p');
+            schoolPhone.className = 'school-phone';
+            schoolPhone.textContent = 'Phone: 09034695566';
             const schoolLevels = document.createElement('p');
             schoolLevels.className = 'school-levels';
-            schoolLevels.textContent = 'CRECHE | BASIC COLLEGE';
+            const crecheLevel = document.createElement('span');
+            crecheLevel.textContent = 'CRECHE';
+            const basicCollegeLevel = document.createElement('span');
+            basicCollegeLevel.textContent = 'BASIC COLLEGE';
+            schoolLevels.append(crecheLevel, basicCollegeLevel);
             const address = document.createElement('p');
             address.className = 'school-address';
             address.textContent = '9A Temidire Street, Ganmo, Kwara State';
             const reportDescription = document.createElement('p');
             reportDescription.textContent = 'ACADEMIC PERFORMANCE REPORT';
-            brand.append(logo, schoolName);
+            brand.append(logo, schoolName, schoolPhone);
             school.append(brand, schoolLevels, address, reportDescription);
             const title = document.createElement('h2');
             title.className = 'report-title';
@@ -148,8 +163,7 @@
             [
                 ['Learner', `${learner.surname} ${learner.othername}`],
                 ['Class', `${classInfo.class_name} - ${classInfo.section}${classInfo.stream ? ` (${classInfo.stream})` : ''}`],
-                ['Academic Session', sessionYear],
-                ['Position', rank ? `${ordinal(rank)} of ${scoredCount}` : 'No scores']
+                ['Academic Session', sessionYear]
             ].forEach(([label, value]) => {
                 const field = document.createElement('div');
                 const strong = document.createElement('strong');
@@ -157,6 +171,29 @@
                 field.append(strong, document.createTextNode(value));
                 details.appendChild(field);
             });
+            const attendance = attendanceByLearner.get(learner.id);
+            const daysPresent = attendance ? Number(attendance.days_present) : null;
+            const daysSchoolOpen = attendance ? Number(attendance.days_school_open) : null;
+            const attendanceField = document.createElement('div');
+            attendanceField.className = 'student-attendance';
+            const attendanceLabel = document.createElement('strong');
+            attendanceLabel.textContent = 'Attendance';
+            const attendanceTable = document.createElement('table');
+            const attendanceBody = document.createElement('tbody');
+            [
+                ['Days absent', daysPresent === null || daysSchoolOpen === null
+                    ? null
+                    : daysSchoolOpen - daysPresent],
+                ['Days present', daysPresent]
+            ].forEach(([label, count]) => {
+                const row = document.createElement('tr');
+                addCell(row, label, 'th');
+                addCell(row, count);
+                attendanceBody.appendChild(row);
+            });
+            attendanceTable.appendChild(attendanceBody);
+            attendanceField.append(attendanceLabel, attendanceTable);
+            details.appendChild(attendanceField);
             card.appendChild(details);
 
             const table = document.createElement('table');
@@ -235,43 +272,35 @@
             const behaviorTitle = document.createElement('h3');
             behaviorTitle.textContent = 'Affective & Psychomotor Traits';
             behaviorPanel.appendChild(behaviorTitle);
-            const behaviorTable = document.createElement('table');
-            const behaviorHead = document.createElement('thead');
-            const behaviorHeader = document.createElement('tr');
-            addCell(behaviorHeader, 'Skill', 'th');
-            addCell(behaviorHeader, 'Rating', 'th');
-            behaviorHead.appendChild(behaviorHeader);
-            behaviorTable.appendChild(behaviorHead);
-            const behaviorBody = document.createElement('tbody');
-            behaviorSkillGroups.forEach(group => {
-                const groupRow = document.createElement('tr');
-                const groupCell = addCell(groupRow, group.category, 'th');
-                groupCell.colSpan = 2;
-                behaviorBody.appendChild(groupRow);
+            const behaviorGroups = document.createElement('div');
+            behaviorGroups.className = 'behavior-groups';
+            ['Psychomotor Traits', 'Affective Traits'].forEach(category => {
+                const group = behaviorSkillGroups.find(item => item.category === category);
+                if (!group) return;
+                const groupPanel = document.createElement('section');
+                groupPanel.className = 'behavior-group';
+                const groupTitle = document.createElement('h4');
+                groupTitle.textContent = group.category;
+                const behaviorTable = document.createElement('table');
+                const behaviorHead = document.createElement('thead');
+                const behaviorHeader = document.createElement('tr');
+                addCell(behaviorHeader, 'Skill', 'th');
+                addCell(behaviorHeader, 'Rating', 'th');
+                behaviorHead.appendChild(behaviorHeader);
+                behaviorTable.appendChild(behaviorHead);
+                const behaviorBody = document.createElement('tbody');
                 group.skills.forEach(skill => {
                     const row = document.createElement('tr');
                     addCell(row, skill);
                     addCell(row, behaviorRatings[skill] || '—');
                     behaviorBody.appendChild(row);
                 });
+                behaviorTable.append(behaviorBody);
+                groupPanel.append(groupTitle, behaviorTable);
+                behaviorGroups.appendChild(groupPanel);
             });
-            behaviorTable.append(behaviorBody);
-            behaviorPanel.appendChild(behaviorTable);
+            behaviorPanel.appendChild(behaviorGroups);
             card.appendChild(behaviorPanel);
-
-            const attendance = attendanceByLearner.get(learner.id);
-            const attendanceSummary = document.createElement('p');
-            attendanceSummary.className = 'remark attendance-summary';
-            const attendanceLabel = document.createElement('strong');
-            attendanceLabel.textContent = 'Attendance: ';
-            const daysPresent = attendance ? Number(attendance.days_present) : null;
-            const daysSchoolOpen = attendance ? Number(attendance.days_school_open) : null;
-            attendanceSummary.append(attendanceLabel, document.createTextNode(
-                daysPresent === null || daysSchoolOpen === null
-                    ? 'Not recorded.'
-                    : `${daysPresent} day(s) present, ${daysSchoolOpen - daysPresent} day(s) absent out of ${daysSchoolOpen} school day(s).`
-            ));
-            card.appendChild(attendanceSummary);
 
             const comments = commentsByLearner.get(learner.id) || {};
             [
@@ -397,13 +426,10 @@
                     : allSummaries.filter(item => item.learner.id === learnerId);
                 reports.replaceChildren();
                 summaries.forEach(summary => {
-                    const rank = summary.average === null ? null :
-                        ranked.findIndex(item => item.average === summary.average) + 1;
                     const report = makeReport(
                         summary.learner, data.subjects, scores, commentsByLearner,
                         behaviorsByLearner, data.behaviorSkillGroups || [],
                         attendanceByLearner, positionsBySubject, data.class,
-                        rank, ranked.length,
                         ranked.length ? ranked[0].average : null,
                         ranked.length ? ranked[ranked.length - 1].average : null
                     );

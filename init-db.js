@@ -140,6 +140,20 @@ async function init() {
       );
     `);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS reception_results (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        subject_id INTEGER NOT NULL REFERENCES subjects(id),
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        mark SMALLINT CHECK (mark >= 1 AND mark <= 5),
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, subject_id, term, session_year)
+      );
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS learner_comments (
         id SERIAL PRIMARY KEY,
         learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,

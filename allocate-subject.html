@@ -197,7 +197,7 @@
                 ? (/(?:^|\b)jss?\s*[-.]?\s*[1-3]\b|junior\s+secondary/i.test(className) ? 'Junior Secondary' : 'Secondary')
                 : /primary|pry/i.test(className)
                     ? 'Primary'
-                    : /creche|nursery|kindergarten|^kg/i.test(className)
+                    : /creche|reception|nursery|kindergarten|^kg/i.test(className)
                         ? 'Creche'
                         : '';
             const eligibleSubjects = allSubjects.filter(subject =>

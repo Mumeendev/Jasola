@@ -27,6 +27,8 @@
             <a class="card" href="upload-result.html"><h2>Upload results</h2><p>Enter results only for your allocated subjects.</p></a>
             <a class="card" href="class-gradebook.html"><h2>Class gradebook</h2><p>See your allocated subjects and collated learner totals.</p></a>
             <a class="card" href="report-cards.html"><h2>Report cards &amp; teacher comments</h2><p>Write teacher comments and prepare class reports.</p></a>
+            <a class="card reception-action" href="reception-upload.html" hidden><h2>Upload Reception results</h2><p>Mark each Reception subject from 1 to 5.</p></a>
+            <a class="card reception-action" href="reception-print.html" hidden><h2>Print Reception results</h2><p>Print the Reception class mark sheet for a term and session.</p></a>
             <a class="card" href="behavioral-skills.html"><h2>Behavioral traits &amp; attendance</h2><p>Rate affective and psychomotor traits and record term attendance.</p></a>
             <a class="card" href="change-password.html"><h2>Change password</h2><p>Keep your account secure.</p></a>
             <a class="card" href="teacher-settings.html"><h2>Settings</h2><p>View your account settings.</p></a>
@@ -39,6 +41,23 @@
         }
         document.getElementById('teacher-name').textContent =
             `Welcome, ${sessionStorage.getItem('username') || 'Teacher'}`;
+        if (sessionStorage.getItem('role') === 'teacher') {
+            (async () => {
+                try {
+                    const baseUrl = await window.resolvePortalApiBase();
+                    const response = await fetch(`${baseUrl}/api/reception/classes`);
+                    const classes = await response.json();
+                    if (!response.ok) throw new Error(classes.error || 'Unable to load Reception assignments.');
+                    if (classes.length) {
+                        document.querySelectorAll('.reception-action').forEach(action => {
+                            action.hidden = false;
+                        });
+                    }
+                } catch (error) {
+                    console.error('Loading Reception teacher actions failed:', error);
+                }
+            })();
+        }
     </script>
 </body>
 </html>

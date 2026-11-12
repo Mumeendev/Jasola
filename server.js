@@ -123,7 +123,7 @@ function subjectCategoryForClass(className) {
     return 'Secondary';
   }
   if (/primary|(?:^|\b)pry\s*[-.]?\s*[1-6]\b/i.test(className)) return 'Primary';
-  if (/creche|nursery|kindergarten|(?:^|\b)kg\s*[-.]?\s*[1-3]\b/i.test(className)) return 'Creche';
+  if (/creche|reception|nursery|kindergarten|(?:^|\b)kg\s*[-.]?\s*[1-3]\b/i.test(className)) return 'Creche';
   return null;
 }
 
@@ -252,6 +252,18 @@ async function initializeDatabase() {
         ca1 NUMERIC(5,2) NOT NULL CHECK (ca1 >= 0 AND ca1 <= 100),
         ca2 NUMERIC(5,2) NOT NULL CHECK (ca2 >= 0 AND ca2 <= 100),
         exam NUMERIC(5,2) NOT NULL CHECK (exam >= 0 AND exam <= 100),
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, subject_id, term, session_year)
+      );
+      CREATE TABLE IF NOT EXISTS reception_results (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        subject_id INTEGER NOT NULL REFERENCES subjects(id),
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        mark SMALLINT CHECK (mark >= 1 AND mark <= 5),
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, subject_id, term, session_year)
@@ -621,6 +633,201 @@ app.get('/api/classes', async (req, res) => {
   } catch (err) {
     console.error('Loading classes failed:', err);
     res.status(500).json({ error: 'Unable to load classes.' });
+  }
+});
+
+app.get('/api/reception/classes', requireRole('admin', 'teacher'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, class_name, section, class_teacher
+       FROM classes
+       WHERE is_active = TRUE AND class_name ILIKE '%reception%'
+         AND ($1 = 'admin' OR class_teacher = $2)
+       ORDER BY class_name, section`,
+      [req.user.role, req.user.username]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Loading Reception classes failed:', err);
+    res.status(500).json({ error: 'Unable to load Reception classes.' });
+  }
+});
+
+app.put('/api/reception/classes/:id/teacher', requireRole('admin'), async (req, res) => {
+  const classId = Number(req.params.id);
+  const teacherUsername = typeof req.body.teacherUsername === 'string'
+    ? req.body.teacherUsername.trim()
+    : '';
+  if (!Number.isInteger(classId) || classId <= 0 || !teacherUsername) {
+    return res.status(400).json({ error: 'Select a Reception class and teacher.' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE classes c
+       SET class_teacher = u.username
+       FROM users u
+       WHERE c.id = $1 AND c.is_active = TRUE
+         AND c.class_name ILIKE '%reception%'
+         AND u.username = $2 AND u.role = 'teacher'
+       RETURNING c.id, c.class_name, c.section, c.class_teacher`,
+      [classId, teacherUsername]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Reception class or teacher not found.' });
+    }
+    res.json({ success: true, class: result.rows[0] });
+  } catch (err) {
+    console.error('Assigning the Reception teacher failed:', err);
+    res.status(500).json({ error: 'Unable to assign the Reception teacher.' });
+  }
+});
+
+app.get('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res) => {
+  const classId = Number(req.query.classId);
+  const { term, sessionYear } = req.query;
+  if (!Number.isInteger(classId) || classId <= 0 ||
+      typeof term !== 'string' || !term.trim() ||
+      typeof sessionYear !== 'string' || !sessionYear.trim()) {
+    return res.status(400).json({ error: 'Select a Reception class, term, and session.' });
+  }
+  try {
+    const classResult = await pool.query(
+      `SELECT id, class_name, section, class_teacher
+       FROM classes WHERE id = $1 AND is_active = TRUE AND class_name ILIKE '%reception%'`,
+      [classId]
+    );
+    if (!classResult.rows.length) return res.status(404).json({ error: 'Reception class not found.' });
+    if (req.user.role === 'teacher' &&
+        classResult.rows[0].class_teacher !== req.user.username) {
+      return res.status(403).json({ error: 'You are not assigned to this Reception class.' });
+    }
+    const [subjectsResult, learnersResult, marksResult] = await Promise.all([
+      pool.query(
+        `SELECT DISTINCT s.id, s.name, s.class_name, s.stream
+         FROM allocations a
+         JOIN subjects s ON s.id = a.subject_id
+         WHERE a.class_id = $1 AND s.is_active = TRUE
+         ORDER BY s.name`,
+        [classId]
+      ),
+      pool.query(
+        `SELECT id, surname, othername, admission_number
+         FROM learners WHERE class_id = $1 ORDER BY surname, othername`,
+        [classId]
+      ),
+      pool.query(
+        `SELECT learner_id, subject_id, mark
+         FROM reception_results
+         WHERE class_id = $1 AND term = $2 AND session_year = $3`,
+        [classId, term.trim(), sessionYear.trim()]
+      )
+    ]);
+    const subjects = subjectsResult.rows.filter(subject =>
+      isSubjectAllowedForClass(subject, classResult.rows[0])
+    );
+    res.json({
+      class: classResult.rows[0],
+      subjects,
+      learners: learnersResult.rows,
+      marks: marksResult.rows.filter(mark =>
+        subjects.some(subject => subject.id === mark.subject_id)
+      )
+    });
+  } catch (err) {
+    console.error('Loading the Reception result sheet failed:', err);
+    res.status(500).json({ error: 'Unable to load the Reception result sheet.' });
+  }
+});
+
+app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res) => {
+  const classId = Number(req.body.classId);
+  const { term, sessionYear, rows } = req.body;
+  if (!Number.isInteger(classId) || classId <= 0 ||
+      typeof term !== 'string' || !term.trim() ||
+      typeof sessionYear !== 'string' || !sessionYear.trim() ||
+      !Array.isArray(rows) ||
+      rows.some(row => !row || typeof row !== 'object' || Array.isArray(row) ||
+        !Array.isArray(row.marks))) {
+    return res.status(400).json({ error: 'Reception class, term, session, and mark rows are required.' });
+  }
+  const normalizedRows = [];
+  for (const row of rows) {
+    const learnerId = Number(row.learnerId);
+    if (!Number.isInteger(learnerId) || learnerId <= 0) {
+      return res.status(400).json({ error: 'Each mark row must identify a valid learner.' });
+    }
+    for (const item of row.marks) {
+      const subjectId = Number(item && item.subjectId);
+      const mark = item && item.mark;
+      if (!Number.isInteger(subjectId) || subjectId <= 0 ||
+          !(mark === null || (Number.isInteger(Number(mark)) && Number(mark) >= 1 && Number(mark) <= 5))) {
+        return res.status(400).json({ error: 'Reception marks must be blank or a whole number from 1 to 5.' });
+      }
+      normalizedRows.push({ learnerId, subjectId, mark: mark === null ? null : Number(mark) });
+    }
+  }
+  const rowKeys = normalizedRows.map(row => `${row.learnerId}:${row.subjectId}`);
+  if (new Set(rowKeys).size !== rowKeys.length) {
+    return res.status(400).json({ error: 'A learner and subject appear more than once in the mark sheet.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const classResult = await client.query(
+      `SELECT id, class_name, class_teacher
+       FROM classes WHERE id = $1 AND is_active = TRUE AND class_name ILIKE '%reception%'`,
+      [classId]
+    );
+    if (!classResult.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Reception class not found.' });
+    }
+    if (req.user.role === 'teacher' &&
+        classResult.rows[0].class_teacher !== req.user.username) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'You are not assigned to this Reception class.' });
+    }
+    const learnersResult = await client.query(
+      'SELECT id FROM learners WHERE class_id = $1',
+      [classId]
+    );
+    const subjectsResult = await client.query(
+      `SELECT DISTINCT s.id, s.class_name, s.stream
+       FROM allocations a JOIN subjects s ON s.id = a.subject_id
+       WHERE a.class_id = $1 AND s.is_active = TRUE`,
+      [classId]
+    );
+    const learnerIds = new Set(learnersResult.rows.map(learner => learner.id));
+    const subjectIds = new Set(subjectsResult.rows
+      .filter(subject => isSubjectAllowedForClass(subject, classResult.rows[0]))
+      .map(subject => subject.id));
+    if (normalizedRows.some(row =>
+      !learnerIds.has(row.learnerId) || !subjectIds.has(row.subjectId)
+    )) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Each mark must belong to a learner and subject in this Reception class.' });
+    }
+    for (const row of normalizedRows) {
+      await client.query(
+        `INSERT INTO reception_results
+          (learner_id, class_id, subject_id, term, session_year, mark, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (learner_id, subject_id, term, session_year)
+         DO UPDATE SET class_id = EXCLUDED.class_id, mark = EXCLUDED.mark,
+           updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        [row.learnerId, classId, row.subjectId, term.trim(), sessionYear.trim(),
+          row.mark, req.user.username]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, saved: normalizedRows.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Saving the Reception result sheet failed:', err);
+    res.status(500).json({ error: 'Unable to save Reception marks.' });
+  } finally {
+    client.release();
   }
 });
 

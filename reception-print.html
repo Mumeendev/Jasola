@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print Reception Results - Jasola Model School</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:1.5rem; background:#edf2f7; color:#1a202c; font-family:Arial,Helvetica,sans-serif; }
+        main { max-width:1200px; margin:0 auto; padding:1.5rem; background:#fff; }
+        .toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+        .filters { display:flex; align-items:end; gap:.75rem; flex-wrap:wrap; margin:1rem 0; }
+        label { display:grid; gap:.35rem; font-weight:600; }
+        select,input { min-width:170px; padding:.65rem; border:1px solid #a0aec0; border-radius:5px; font:inherit; }
+        button,.button { display:inline-block; padding:.7rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; font:inherit; text-decoration:none; cursor:pointer; }
+        .button.secondary { background:#4a5568; }
+        h1,h2 { color:#1a365d; }
+        .school-heading { text-align:center; border-bottom:2px solid #2c5282; margin-bottom:1rem; padding-bottom:.75rem; }
+        .school-heading img { display:block; width:70px; height:70px; margin:0 auto .35rem; object-fit:contain; }
+        .school-heading h1,.school-heading p { margin:.2rem; }
+        .school-levels { color:#2c5282; font-weight:700; letter-spacing:.08em; }
+        .details { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; font-weight:600; }
+        #status { min-height:1.5rem; color:#4a5568; }
+        .table-wrap { overflow:auto; border:1px solid #cbd5e0; }
+        table { width:100%; min-width:850px; border-collapse:collapse; }
+        th,td { padding:.5rem; border:1px solid #718096; text-align:center; }
+        th { background:#1f4e78; color:#fff; }
+        th:first-child,td:first-child,th:nth-child(2),td:nth-child(2) { text-align:left; }
+        .mark-scale { display:block; margin-top:.25rem; font-size:.75rem; font-weight:400; }
+        .summary { display:grid; grid-template-columns:repeat(2,minmax(150px,1fr)); gap:.75rem; margin-top:1rem; }
+        .summary div { padding:.7rem; border:1px solid #a0aec0; }
+        .summary strong { display:block; margin-bottom:.2rem; }
+        @page { size:A4 landscape; margin:10mm; }
+        @media print {
+            body { padding:0; background:#fff; }
+            main { max-width:none; padding:0; }
+            .toolbar,.filters,#status { display:none !important; }
+            .table-wrap { overflow:visible; border:0; }
+            table { min-width:0; font-size:8pt; }
+            th,td { padding:3px; }
+            th { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+        }
+    </style>
+    <link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+    <main>
+        <div class="toolbar">
+            <a class="button secondary" id="back-link" href="more-options.html">More Options</a>
+            <button type="button" onclick="window.print()">Print Reception Results</button>
+        </div>
+        <form id="selection-form" class="filters">
+            <label for="class">Reception class
+                <select id="class" required><option value="">Loading Reception classes…</option></select>
+            </label>
+            <label for="term">Term
+                <select id="term" required>
+                    <option value="">Select term</option>
+                    <option>First Term</option>
+                    <option>Second Term</option>
+                    <option>Third Term</option>
+                </select>
+            </label>
+            <label for="session">Session
+                <input id="session" type="text" inputmode="numeric" pattern="[0-9]{4}/[0-9]{4}"
+                       placeholder="e.g. 2026/2027" title="Enter the session as YYYY/YYYY" required>
+            </label>
+            <button type="submit">Show Results</button>
+        </form>
+        <p id="status" role="status">Choose a class, term, and session.</p>
+        <section id="results" hidden>
+            <div class="school-heading">
+                <img src="images/WhatsApp%20Image%202026-11-11%20at%206.03.41%20PM.jpeg" alt="Jasola Model School logo">
+                <h1>JASOLA MODEL SCHOOL</h1>
+                <p class="school-levels">RECEPTION RESULTS</p>
+                <p>9A Temidire Street, Ganmo, Kwara State</p>
+            </div>
+            <div class="details">
+                <p id="class-details"></p>
+                <p id="term-details"></p>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead id="result-head"></thead>
+                    <tbody id="result-body"></tbody>
+                </table>
+            </div>
+            <section id="summary" class="summary"></section>
+        </section>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        const role = sessionStorage.getItem('role');
+        if (role === 'teacher') {
+            document.getElementById('back-link').href = 'teacher-dashboard.html';
+            document.getElementById('back-link').textContent = 'Teacher Page';
+        }
+
+        const classSelect = document.getElementById('class');
+        const status = document.getElementById('status');
+        const results = document.getElementById('results');
+        const resultHead = document.getElementById('result-head');
+        const resultBody = document.getElementById('result-body');
+        const summary = document.getElementById('summary');
+
+        async function loadClasses() {
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/reception/classes`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load Reception classes.');
+                classSelect.innerHTML = '<option value="">Select Reception class</option>';
+                classes.forEach(item => classSelect.add(new Option(
+                    `${item.class_name} - ${item.section}`, item.id
+                )));
+                if (!classes.length) {
+                    classSelect.innerHTML = '<option value="">No assigned Reception classes</option>';
+                    status.textContent = role === 'admin'
+                        ? 'Add a Reception class before printing results.'
+                        : 'You are not assigned as the teacher of a Reception class.';
+                }
+            } catch (error) {
+                classSelect.innerHTML = '<option value="">Unable to load classes</option>';
+                status.textContent = error.message || 'Unable to load Reception classes.';
+            }
+        }
+
+        function renderResults(data) {
+            resultHead.replaceChildren();
+            resultBody.replaceChildren();
+            const header = document.createElement('tr');
+            ['No.', 'Learner'].forEach(label => {
+                const cell = document.createElement('th');
+                cell.textContent = label;
+                header.appendChild(cell);
+            });
+            data.subjects.forEach(subject => {
+                const cell = document.createElement('th');
+                cell.textContent = subject.name;
+                const scale = document.createElement('span');
+                scale.className = 'mark-scale';
+                scale.textContent = '5 · 4 · 3 · 2 · 1';
+                cell.appendChild(scale);
+                header.appendChild(cell);
+            });
+            ['Mark obtained', 'Mark obtainable', 'Total %'].forEach(label => {
+                const cell = document.createElement('th');
+                cell.textContent = label;
+                header.appendChild(cell);
+            });
+            resultHead.appendChild(header);
+
+            const totals = [];
+            data.learners.forEach((learner, index) => {
+                const row = document.createElement('tr');
+                const name = `${learner.surname} ${learner.othername}` +
+                    (learner.admission_number ? ` (${learner.admission_number})` : '');
+                [index + 1, name].forEach(value => {
+                    const cell = document.createElement('td');
+                    cell.textContent = String(value);
+                    row.appendChild(cell);
+                });
+                let obtained = 0;
+                let anyMark = false;
+                data.subjects.forEach(subject => {
+                    const saved = data.marks.find(mark =>
+                        mark.learner_id === learner.id && mark.subject_id === subject.id
+                    );
+                    const mark = saved && saved.mark !== null ? Number(saved.mark) : null;
+                    if (mark !== null) {
+                        obtained += mark;
+                        anyMark = true;
+                    }
+                    const cell = document.createElement('td');
+                    cell.textContent = mark === null ? '—' : String(mark);
+                    row.appendChild(cell);
+                });
+                const obtainable = data.subjects.length * 5;
+                [obtained, obtainable || '—', obtainable ? `${(obtained / obtainable * 100).toFixed(2)}%` : '—']
+                    .forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = String(value);
+                        row.appendChild(cell);
+                    });
+                if (anyMark) totals.push(obtained);
+                resultBody.appendChild(row);
+            });
+
+            summary.replaceChildren();
+            [
+                ['Class highest', totals.length ? Math.max(...totals) : '—'],
+                ['Class lowest', totals.length ? Math.min(...totals) : '—']
+            ].forEach(([label, value]) => {
+                const item = document.createElement('div');
+                const heading = document.createElement('strong');
+                heading.textContent = label;
+                item.append(heading, document.createTextNode(value));
+                summary.appendChild(item);
+            });
+            document.getElementById('class-details').textContent =
+                `Class: ${data.class.class_name} - ${data.class.section}`;
+            document.getElementById('term-details').textContent =
+                `${document.getElementById('term').value} | ${document.getElementById('session').value.trim()}`;
+            results.hidden = false;
+            status.textContent = data.subjects.length
+                ? `${data.learners.length} learner(s) loaded.`
+                : 'No subjects are assigned to this Reception class. Allocate its subjects before printing.';
+        }
+
+        document.getElementById('selection-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            results.hidden = true;
+            status.textContent = 'Loading Reception results…';
+            try {
+                const query = new URLSearchParams({
+                    classId: classSelect.value,
+                    term: document.getElementById('term').value,
+                    sessionYear: document.getElementById('session').value.trim()
+                });
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/reception/sheet?${query}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load Reception results.');
+                renderResults(data);
+            } catch (error) {
+                status.textContent = error.message || 'Unable to load Reception results.';
+            }
+        });
+
+        loadClasses();
+    </script>
+</body>
+</html>
