@@ -72,7 +72,7 @@
     <main>
         <div class="toolbar">
             <a id="back-link" href="report-cards.html">Back to selection</a>
-            <button type="button" id="print-button" onclick="window.print()">Print Report Cards</button>
+            <button type="button" id="print-button">Print Report Cards</button>
         </div>
         <p id="status" role="status">Preparing report cards…</p>
         <section id="reports"></section>
@@ -89,8 +89,10 @@
         const schoolFees = params.get('schoolFees');
         const reports = document.getElementById('reports');
         const status = document.getElementById('status');
+        const printButton = document.getElementById('print-button');
+        let reportLoadPromise;
         if (learnerId !== null) {
-            document.getElementById('print-button').textContent = 'Print This Report Card';
+            printButton.textContent = 'Print This Report Card';
         }
         if (sessionStorage.getItem('role') === 'teacher') {
             document.getElementById('back-link').href = 'teacher-dashboard.html';
@@ -143,9 +145,11 @@
             schoolLevels.className = 'school-levels';
             const crecheLevel = document.createElement('span');
             crecheLevel.textContent = 'CRECHE';
-            const basicCollegeLevel = document.createElement('span');
-            basicCollegeLevel.textContent = 'BASIC COLLEGE';
-            schoolLevels.append(crecheLevel, basicCollegeLevel);
+            const basicLevel = document.createElement('span');
+            basicLevel.textContent = 'BASIC';
+            const collegeLevel = document.createElement('span');
+            collegeLevel.textContent = 'COLLEGE';
+            schoolLevels.append(crecheLevel, basicLevel, collegeLevel);
             const address = document.createElement('p');
             address.className = 'school-address';
             address.textContent = '9A Temidire Street, Ganmo, Kwara State';
@@ -214,7 +218,7 @@
                 const total = score ? Number(score.ca1) + Number(score.ca2) + Number(score.exam) : null;
                 addCell(row, total === null ? null : total.toFixed(2));
                 const subjectPosition = positionsBySubject.get(`${subject.id}:${learner.id}`);
-                addCell(row, subjectPosition ? `${ordinal(subjectPosition.rank)} of ${subjectPosition.count}` : null);
+                addCell(row, subjectPosition ? ordinal(subjectPosition.rank) : null);
                 const grade = total === null ? null : gradeFor(total);
                 addCell(row, grade && grade[0]);
                 addCell(row, grade && grade[1]);
@@ -370,7 +374,7 @@
             try {
                 const baseUrl = await window.resolvePortalApiBase();
                 const query = new URLSearchParams({ classId: String(classId), term, sessionYear });
-                const response = await fetch(`${baseUrl}/api/report-cards?${query}`);
+                const response = await fetch(`${baseUrl}/api/report-cards?${query}`, { cache: 'no-store' });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Unable to prepare report cards.');
                 const selectedLearners = learnerId === null
@@ -378,7 +382,7 @@
                     : data.learners.filter(learner => learner.id === learnerId);
                 if (learnerId !== null && !selectedLearners.length) {
                     status.textContent = 'The selected learner is not registered in this class.';
-                    return;
+                    return false;
                 }
                 const scores = new Map(data.scores.map(score => [
                     `${score.learner_id}:${score.subject_id}`, score
@@ -404,8 +408,7 @@
                     rankedScores.forEach((item, index) => {
                         const rank = rankedScores.findIndex(candidate => candidate.total === item.total) + 1;
                         positionsBySubject.set(`${subject.id}:${item.learnerId}`, {
-                            rank,
-                            count: rankedScores.length
+                            rank
                         });
                     });
                 });
@@ -443,11 +446,27 @@
                         ? `${selectedLearners.length} report card(s) prepared for ${data.class.class_name} - ${data.class.section}. Use Print Report Cards to print.`
                         : `Report card for ${selectedLearners[0].surname} ${selectedLearners[0].othername} is ready to print.`
                     : 'No learners are registered in this class.';
+                return selectedLearners.length > 0;
             } catch (error) {
                 status.textContent = error.message || 'Unable to prepare report cards.';
+                return false;
             }
         }
-        loadReports();
+
+        printButton.addEventListener('click', async () => {
+            printButton.disabled = true;
+            const printLabel = printButton.textContent;
+            printButton.textContent = 'Refreshing report cards…';
+            try {
+                if (reportLoadPromise) await reportLoadPromise;
+                if (await loadReports()) window.print();
+            } finally {
+                printButton.disabled = false;
+                printButton.textContent = printLabel;
+            }
+        });
+
+        reportLoadPromise = loadReports();
     </script>
 </body>
 </html>
