@@ -181,10 +181,16 @@
                 }
 
                 list.replaceChildren();
+                const categoryNames = {
+                    Creche: 'Creche (Reception, KG One–Two)',
+                    Primary: 'Primary (Basic 1–5)',
+                    'Junior Secondary': 'Junior Secondary (JSS 1–3)',
+                    Secondary: 'Senior Secondary (SS 1–3)'
+                };
                 subjects.forEach((subject, index) => {
                     const row = document.createElement('tr');
                     [index + 1, subject.name,
-                        subject.class_name === 'Secondary' ? 'Senior Secondary' : subject.class_name
+                        categoryNames[subject.class_name] || subject.class_name
                     ].forEach(value => {
                         const cell = document.createElement('td');
                         cell.textContent = String(value || '');

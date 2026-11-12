@@ -22,7 +22,7 @@
         <p>Enter the class, section, and the teacher responsible for the class.</p>
         <form id="class-form">
             <label for="class-name">Class name</label>
-            <input id="class-name" name="className" placeholder="e.g. Primary 1 or JSS 1" required maxlength="100">
+            <input id="class-name" name="className" placeholder="e.g. KG One, Basic 1, JSS One, or SS One" required maxlength="100">
             <div id="stream-field" hidden>
                 <label for="stream">Senior secondary stream</label>
                 <select id="stream" name="stream">
@@ -50,7 +50,7 @@
         const streamSelect = document.getElementById('stream');
 
         function updateStreamField() {
-            const isSeniorSecondary = /senior\s+secondary|(?:^|\b)sss?\s*[-.]?\s*[1-3]\b/i.test(classNameInput.value);
+            const isSeniorSecondary = /senior\s+secondary|(?:^|\b)sss?\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(classNameInput.value);
             streamField.hidden = !isSeniorSecondary;
             streamSelect.required = isSeniorSecondary;
             if (!isSeniorSecondary) streamSelect.value = '';

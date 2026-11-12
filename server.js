@@ -112,25 +112,28 @@ function requireRole(...roles) {
 }
 
 function isSeniorSecondaryClass(className) {
-  return /senior\s+secondary|(?:^|\b)sss?\s*[-.]?\s*[1-3]\b/i.test(className);
+  return /senior\s+secondary|(?:^|\b)sss?\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(className);
 }
 
 function subjectCategoryForClass(className) {
-  if (/junior\s+secondary|(?:^|\b)jss?\s*[-.]?\s*[1-3]\b/i.test(className)) {
+  if (/junior\s+secondary|(?:^|\b)jss?\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(className)) {
     return 'Junior Secondary';
   }
   if (isSeniorSecondaryClass(className) || /secondary/i.test(className)) {
     return 'Secondary';
   }
-  if (/primary|(?:^|\b)pry\s*[-.]?\s*[1-6]\b/i.test(className)) return 'Primary';
-  if (/creche|reception|nursery|kindergarten|(?:^|\b)kg\s*[-.]?\s*[1-3]\b/i.test(className)) return 'Creche';
+  if (/primary|(?:^|\b)basic\s*[-.]?\s*(?:[1-5]|one|two|three|four|five)\b|(?:^|\b)pry\s*[-.]?\s*[1-6]\b/i.test(className)) {
+    return 'Primary';
+  }
+  if (/creche|reception|nursery|kindergarten|(?:^|\b)kg\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(className)) {
+    return 'Creche';
+  }
   return null;
 }
 
 function isSubjectAllowedForClass(subject, classRow) {
   if (subject.stream && subject.stream !== classRow.stream) return false;
   const category = subjectCategoryForClass(classRow.class_name);
-  if (category === 'Junior Secondary' && subject.class_name === 'Secondary') return true;
   return !category || !subject.class_name || subject.class_name === category;
 }
 

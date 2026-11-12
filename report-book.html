@@ -223,7 +223,7 @@
             });
             if (!subjects.length) {
                 const emptyRow = document.createElement('tr');
-                const emptyCell = addCell(emptyRow, 'No subjects are allocated to this class.');
+                const emptyCell = addCell(emptyRow, 'No results have been uploaded for this learner.');
                 emptyCell.colSpan = 8;
                 body.appendChild(emptyRow);
             }
@@ -426,8 +426,11 @@
                     : allSummaries.filter(item => item.learner.id === learnerId);
                 reports.replaceChildren();
                 summaries.forEach(summary => {
+                    const learnerSubjects = data.subjects.filter(subject =>
+                        scores.has(`${summary.learner.id}:${subject.id}`)
+                    );
                     const report = makeReport(
-                        summary.learner, data.subjects, scores, commentsByLearner,
+                        summary.learner, learnerSubjects, scores, commentsByLearner,
                         behaviorsByLearner, data.behaviorSkillGroups || [],
                         attendanceByLearner, positionsBySubject, data.class,
                         ranked.length ? ranked[0].average : null,
