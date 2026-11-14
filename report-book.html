@@ -21,15 +21,20 @@
         .school-brand { display:flex; flex-direction:column; align-items:center; gap:.3rem; }
         .school-logo { width:82px; height:82px; object-fit:contain; }
         .report-title { margin:1rem 0; text-align:center; text-transform:uppercase; letter-spacing:.12em; }
-        .student-details { display:grid; grid-template-columns:2fr 1fr 1fr; gap:.55rem 1rem; margin:1rem 0; padding:.8rem; border:1px solid #a0aec0; background:#f7fafc; }
+        .student-details { display:grid; grid-template-columns:2fr 1fr 1fr 90px; gap:.55rem 1rem; margin:1rem 0; padding:.8rem; border:1px solid #a0aec0; background:#f7fafc; }
         .student-details strong { color:#2d3748; }
         .student-attendance { grid-column:3; grid-row:2; }
         .student-attendance table { margin-top:.3rem; font-size:8pt; }
         .student-attendance th,.student-attendance td { padding:.2rem .3rem; }
+        .student-passport { grid-column:4; grid-row:1 / span 2; }
+        .student-passport img { width:82px; height:100px; object-fit:cover; border:1px solid #a0aec0; }
         table { width:100%; border-collapse:collapse; font-size:10pt; }
+        .scores-table { font-size:8pt; }
         th,td { padding:.48rem; border:1px solid #718096; text-align:center; }
         th { background:#e2e8f0; }
         th:first-child,td:first-child { text-align:left; }
+        .marks-summary { width:min(360px,100%); margin:.4rem 0 1rem auto; }
+        .marks-summary th:first-child,.marks-summary td:first-child { text-align:left; }
         .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:1rem 0; }
         .summary div { padding:.65rem; border:1px solid #a0aec0; text-align:center; }
         .summary strong { display:block; margin-bottom:.2rem; font-size:9pt; }
@@ -58,7 +63,9 @@
             body { padding:.5rem; }
             .report-card { padding:1rem; }
             .student-details { grid-template-columns:1fr 1fr; }
+            .report-card .student-details { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
             .student-attendance { grid-column:2; grid-row:auto; }
+            .report-card .student-passport { grid-column:2; grid-row:1 / span 2; }
             .summary { grid-template-columns:1fr 1fr; }
             .behavior-groups { grid-template-columns:1fr; }
             .school-logo { width:62px; height:62px; }
@@ -90,13 +97,14 @@
         const reports = document.getElementById('reports');
         const status = document.getElementById('status');
         const printButton = document.getElementById('print-button');
+        const role = sessionStorage.getItem('role');
         let reportLoadPromise;
+        if (role !== 'admin') {
+            window.location.replace(role === 'teacher' ? 'teacher-dashboard.html' : 'login.html');
+            printButton.disabled = true;
+        }
         if (learnerId !== null) {
             printButton.textContent = 'Print This Report Card';
-        }
-        if (sessionStorage.getItem('role') === 'teacher') {
-            document.getElementById('back-link').href = 'teacher-dashboard.html';
-            document.getElementById('back-link').textContent = 'Back to Teacher Page';
         }
 
         function gradeFor(total) {
@@ -125,7 +133,7 @@
 
         function makeReport(learner, subjects, scoresByKey, commentsByLearner, behaviorsByLearner,
             behaviorSkillGroups, attendanceByLearner, positionsBySubject, classInfo,
-            classHighest, classLowest) {
+            classHighest, classLowest, subjectScoreExtremes) {
             const card = document.createElement('article');
             card.className = 'report-card';
             const school = document.createElement('div');
@@ -175,6 +183,15 @@
                 field.append(strong, document.createTextNode(value));
                 details.appendChild(field);
             });
+            if (learner.passport_photo) {
+                const passport = document.createElement('div');
+                passport.className = 'student-passport';
+                const image = document.createElement('img');
+                image.src = learner.passport_photo;
+                image.alt = `Passport photo of ${learner.surname} ${learner.othername}`;
+                passport.appendChild(image);
+                details.appendChild(passport);
+            }
             const attendance = attendanceByLearner.get(learner.id);
             const daysPresent = attendance ? Number(attendance.days_present) : null;
             const daysSchoolOpen = attendance ? Number(attendance.days_school_open) : null;
@@ -201,9 +218,10 @@
             card.appendChild(details);
 
             const table = document.createElement('table');
+            table.className = 'scores-table';
             const head = document.createElement('thead');
             const header = document.createElement('tr');
-            ['Subject', 'CA1 /20', 'CA2 /20', 'Exam /60', 'Total /100', 'Position', 'Grade', 'Remark'].forEach(label => addCell(header, label, 'th'));
+            ['Subject', 'CA1 /20', 'CA2 /20', 'Exam /60', 'Total /100', 'Highest score', 'Lowest score', 'Position', 'Grade', 'Remark'].forEach(label => addCell(header, label, 'th'));
             head.appendChild(header);
             table.appendChild(head);
             const body = document.createElement('tbody');
@@ -217,6 +235,9 @@
                 addCell(row, score && score.exam);
                 const total = score ? Number(score.ca1) + Number(score.ca2) + Number(score.exam) : null;
                 addCell(row, total === null ? null : total.toFixed(2));
+                const extremes = subjectScoreExtremes.get(subject.id);
+                addCell(row, extremes ? extremes.highest.toFixed(2) : null);
+                addCell(row, extremes ? extremes.lowest.toFixed(2) : null);
                 const subjectPosition = positionsBySubject.get(`${subject.id}:${learner.id}`);
                 addCell(row, subjectPosition ? ordinal(subjectPosition.rank) : null);
                 const grade = total === null ? null : gradeFor(total);
@@ -228,28 +249,32 @@
             if (!subjects.length) {
                 const emptyRow = document.createElement('tr');
                 const emptyCell = addCell(emptyRow, 'No results have been uploaded for this learner.');
-                emptyCell.colSpan = 8;
+                emptyCell.colSpan = 10;
                 body.appendChild(emptyRow);
             }
             table.appendChild(body);
-            const foot = document.createElement('tfoot');
-            const obtainableRow = document.createElement('tr');
-            const obtainableLabel = addCell(obtainableRow, 'Marks Obtainable');
-            obtainableLabel.colSpan = 4;
-            addCell(obtainableRow, subjects.length ? (subjects.length * 100).toFixed(2) : '—');
-            addCell(obtainableRow, null);
-            addCell(obtainableRow, null);
-            addCell(obtainableRow, null);
-            const obtainedRow = document.createElement('tr');
-            const obtainedLabel = addCell(obtainedRow, 'Marks Obtained');
-            obtainedLabel.colSpan = 4;
-            addCell(obtainedRow, learnerScores.reduce((sum, score) => sum + score, 0).toFixed(2));
-            addCell(obtainedRow, null);
-            addCell(obtainedRow, null);
-            addCell(obtainedRow, null);
-            foot.append(obtainableRow, obtainedRow);
-            table.appendChild(foot);
             card.appendChild(table);
+
+            const marksSummary = document.createElement('table');
+            marksSummary.className = 'marks-summary';
+            const marksHead = document.createElement('thead');
+            const marksHeader = document.createElement('tr');
+            addCell(marksHeader, 'Marks summary', 'th');
+            addCell(marksHeader, 'Score', 'th');
+            marksHead.appendChild(marksHeader);
+            marksSummary.appendChild(marksHead);
+            const marksBody = document.createElement('tbody');
+            [
+                ['Mark obtained', learnerScores.reduce((sum, score) => sum + score, 0).toFixed(2)],
+                ['Mark obtainable', subjects.length ? (subjects.length * 100).toFixed(2) : '—']
+            ].forEach(([label, value]) => {
+                const row = document.createElement('tr');
+                addCell(row, label);
+                addCell(row, value);
+                marksBody.appendChild(row);
+            });
+            marksSummary.appendChild(marksBody);
+            card.appendChild(marksSummary);
 
             const totalScore = learnerScores.reduce((sum, score) => sum + score, 0);
             const mean = learnerScores.length ? totalScore / learnerScores.length : null;
@@ -387,6 +412,14 @@
                 const scores = new Map(data.scores.map(score => [
                     `${score.learner_id}:${score.subject_id}`, score
                 ]));
+                const subjectScoreExtremes = new Map();
+                data.scores.forEach(score => {
+                    const total = Number(score.ca1) + Number(score.ca2) + Number(score.exam);
+                    const current = subjectScoreExtremes.get(score.subject_id);
+                    subjectScoreExtremes.set(score.subject_id, current
+                        ? { highest: Math.max(current.highest, total), lowest: Math.min(current.lowest, total) }
+                        : { highest: total, lowest: total });
+                });
                 const commentsByLearner = new Map((data.comments || []).map(comment => [
                     comment.learner_id, comment
                 ]));
@@ -437,7 +470,8 @@
                         behaviorsByLearner, data.behaviorSkillGroups || [],
                         attendanceByLearner, positionsBySubject, data.class,
                         ranked.length ? ranked[0].average : null,
-                        ranked.length ? ranked[ranked.length - 1].average : null
+                        ranked.length ? ranked[ranked.length - 1].average : null,
+                        subjectScoreExtremes
                     );
                     reports.appendChild(report.card);
                 });
@@ -453,7 +487,7 @@
             }
         }
 
-        printButton.addEventListener('click', async () => {
+        if (role === 'admin') printButton.addEventListener('click', async () => {
             printButton.disabled = true;
             const printLabel = printButton.textContent;
             printButton.textContent = 'Refreshing report cards…';
@@ -466,7 +500,7 @@
             }
         });
 
-        reportLoadPromise = loadReports();
+        if (role === 'admin') reportLoadPromise = loadReports();
     </script>
 </body>
 </html>

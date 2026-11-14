@@ -18,8 +18,10 @@
         #learner-picker { margin-top:1rem; padding:1rem; border:1px solid #cbd5e0; border-radius:6px; }
         #learner-picker[hidden] { display:none; }
         .learner-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.65rem; }
+        .learner-item { min-width:0; }
         .learner-choice { width:100%; min-height:48px; margin:0; text-align:left; background:#fff; color:#1a365d; border:1px solid #a0aec0; overflow-wrap:anywhere; }
         .learner-choice:hover,.learner-choice:focus-visible { background:#ebf8ff; border-color:#2c5282; }
+        .passport-button { width:100%; margin:.35rem 0 0; padding:.55rem; background:#4a5568; }
         .comment-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,3fr); gap:.75rem; align-items:start; padding:.75rem 0; border-bottom:1px solid #e2e8f0; }
         .comment-row textarea { width:100%; min-height:70px; padding:.65rem; border:1px solid #cbd5e0; border-radius:5px; font:inherit; }
         .comment-name { font-weight:600; }
@@ -78,16 +80,11 @@
     <script src="auth.js"></script>
     <script>
         const role = sessionStorage.getItem('role');
-        const commentType = role === 'teacher' ? 'teacher' : 'principal';
-        const commentLabel = commentType === 'teacher' ? "Teacher's" : "Principal's";
-        if (role === 'teacher') {
-            document.getElementById('back-link').href = 'teacher-dashboard.html';
-            document.getElementById('back-link').textContent = 'Back to Teacher Page';
-            document.getElementById('load-comments-button').textContent = 'Teacher Comments';
-            document.getElementById('comments-title').textContent = 'Teacher Comments';
-            document.getElementById('comments-description').textContent =
-                'Add or edit a teacher comment for each learner. Leave a field empty to clear it.';
-        }
+        if (role !== 'admin') {
+            window.location.replace(role === 'teacher' ? 'teacher-dashboard.html' : 'login.html');
+        } else {
+        const commentType = 'principal';
+        const commentLabel = "Principal's";
 
         const commentPanel = document.getElementById('comments-panel');
         const commentsList = document.getElementById('comments-list');
@@ -125,6 +122,8 @@
                 if (!response.ok) throw new Error(learners.error || 'Unable to load learners.');
 
                 learners.forEach(learner => {
+                    const item = document.createElement('div');
+                    item.className = 'learner-item';
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.className = 'learner-choice';
@@ -143,7 +142,61 @@
                         if (schoolFees) reportQuery.set('schoolFees', schoolFees);
                         window.location.href = `report-book.html?${reportQuery}`;
                     });
-                    learnerList.appendChild(button);
+                    const passportInput = document.createElement('input');
+                    passportInput.type = 'file';
+                    passportInput.accept = 'image/png,image/jpeg,image/webp';
+                    passportInput.hidden = true;
+                    const passportButton = document.createElement('button');
+                    passportButton.type = 'button';
+                    passportButton.className = 'passport-button';
+                    passportButton.textContent = learner.passport_photo
+                        ? 'Update passport photo'
+                        : 'Add passport photo';
+                    passportButton.addEventListener('click', () => passportInput.click());
+                    passportInput.addEventListener('change', async () => {
+                        const file = passportInput.files && passportInput.files[0];
+                        if (!file) return;
+                        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
+                            file.size === 0 || file.size > 2 * 1024 * 1024) {
+                            document.getElementById('status').textContent =
+                                'Choose a PNG, JPEG, or WebP passport photo up to 2 MB.';
+                            passportInput.value = '';
+                            return;
+                        }
+                        passportButton.disabled = true;
+                        document.getElementById('status').textContent = 'Saving passport photo…';
+                        try {
+                            const passportPhoto = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.onerror = () => reject(new Error('Unable to read passport photo.'));
+                                reader.readAsDataURL(file);
+                            });
+                            const baseUrl = await window.resolvePortalApiBase();
+                            const response = await fetch(
+                                `${baseUrl}/api/learners/${encodeURIComponent(learner.id)}/passport`,
+                                {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ passportPhoto })
+                                }
+                            );
+                            const data = await response.json();
+                            if (!response.ok) throw new Error(data.error || 'Unable to save passport photo.');
+                            learner.passport_photo = passportPhoto;
+                            passportButton.textContent = 'Update passport photo';
+                            document.getElementById('status').textContent =
+                                `Passport photo saved for ${learner.surname} ${learner.othername}.`;
+                        } catch (error) {
+                            document.getElementById('status').textContent =
+                                error.message || 'Unable to save passport photo.';
+                        } finally {
+                            passportButton.disabled = false;
+                            passportInput.value = '';
+                        }
+                    });
+                    item.append(button, passportButton, passportInput);
+                    learnerList.appendChild(item);
                 });
                 learnerPicker.hidden = false;
                 document.getElementById('status').textContent = learners.length
@@ -267,6 +320,7 @@
             showLearners();
         });
         loadClasses();
+        }
     </script>
 </body>
 </html>

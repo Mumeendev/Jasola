@@ -78,6 +78,7 @@ async function init() {
       );
     `);
     await client.query('ALTER TABLE learners ADD COLUMN IF NOT EXISTS class_id INTEGER REFERENCES classes(id);');
+    await client.query('ALTER TABLE learners ADD COLUMN IF NOT EXISTS passport_photo TEXT;');
     await client.query(`
       INSERT INTO classes (class_name, section)
       SELECT DISTINCT class_name, 'General'

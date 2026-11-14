@@ -16,7 +16,7 @@ if (!process.env.SESSION_SECRET) {
 }
 
 app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '3mb' }));
 app.use((req, res, next) => {
   const protectedPaths = ['/server.js', '/init-db.js', '/package.json', '/package-lock.json'];
   if (protectedPaths.includes(req.path) || req.path.startsWith('/node_modules/')) {
@@ -218,6 +218,7 @@ async function initializeDatabase() {
       ALTER TABLE learners ADD COLUMN IF NOT EXISTS admission_number VARCHAR(100);
       ALTER TABLE learners ADD COLUMN IF NOT EXISTS date_of_birth DATE;
       ALTER TABLE learners ADD COLUMN IF NOT EXISTS class_id INTEGER REFERENCES classes(id);
+      ALTER TABLE learners ADD COLUMN IF NOT EXISTS passport_photo TEXT;
 
       CREATE TABLE IF NOT EXISTS results (
         id SERIAL PRIMARY KEY,
@@ -1031,8 +1032,9 @@ app.get('/api/learners', requireRole('admin', 'teacher'), async (req, res) => {
         return res.status(403).json({ error: 'You are not assigned to this class.' });
       }
     }
+    const passportColumn = req.user.role === 'admin' ? ', passport_photo' : '';
     const result = await pool.query(
-      `SELECT id, surname, othername, admission_number, class_id, class_name
+      `SELECT id, surname, othername, admission_number, class_id, class_name${passportColumn}
        FROM learners WHERE class_id = $1 ORDER BY surname, othername`,
       [classId]
     );
@@ -1245,7 +1247,32 @@ app.put('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) =
   }
 });
 
-app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) => {
+app.put('/api/learners/:id/passport', requireRole('admin'), async (req, res) => {
+  const learnerId = Number(req.params.id);
+  const { passportPhoto } = req.body;
+  const match = typeof passportPhoto === 'string'
+    ? passportPhoto.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/)
+    : null;
+  if (!Number.isInteger(learnerId) || learnerId <= 0 ||
+      !match || Buffer.from(match[2], 'base64').length === 0 ||
+      Buffer.from(match[2], 'base64').length > 2 * 1024 * 1024 ||
+      Buffer.from(match[2], 'base64').toString('base64') !== match[2]) {
+    return res.status(400).json({ error: 'Choose a valid PNG, JPEG, or WebP passport photo up to 2 MB.' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE learners SET passport_photo = $1 WHERE id = $2 RETURNING id',
+      [passportPhoto, learnerId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Learner not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Saving learner passport photo failed:', err);
+    res.status(500).json({ error: 'Unable to save learner passport photo.' });
+  }
+});
+
+app.get('/api/report-cards', requireRole('admin'), async (req, res) => {
   const classId = Number(req.query.classId);
   const { term, sessionYear } = req.query;
   if (!Number.isInteger(classId) || classId <= 0 ||
@@ -1254,16 +1281,6 @@ app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) =
     return res.status(400).json({ error: 'Select a class, term, and session.' });
   }
   try {
-    if (req.user.role === 'teacher') {
-      const allocation = await pool.query(
-        'SELECT 1 FROM allocations WHERE teacher_username = $1 AND class_id = $2 LIMIT 1',
-        [req.user.username, classId]
-      );
-      if (!allocation.rows.length) {
-        return res.status(403).json({ error: 'You are not assigned to this class.' });
-      }
-    }
-
     const classResult = await pool.query(
       `SELECT c.id, c.class_name, c.section, c.class_teacher, c.stream,
               u.surname AS teacher_surname, u.othername AS teacher_othername
@@ -1274,52 +1291,29 @@ app.get('/api/report-cards', requireRole('admin', 'teacher'), async (req, res) =
     if (!classResult.rows.length) return res.status(404).json({ error: 'Class not found.' });
 
     const learnersResult = await pool.query(
-      `SELECT id, surname, othername, admission_number
+      `SELECT id, surname, othername, admission_number, passport_photo
        FROM learners WHERE class_id = $1 ORDER BY surname, othername`,
       [classId]
     );
-    const subjectsResult = req.user.role === 'teacher'
-      ? await pool.query(
-        `SELECT DISTINCT s.id, s.name, s.class_name, s.stream
-         FROM allocations a
-         JOIN subjects s ON s.id = a.subject_id
-         JOIN classes c ON c.id = a.class_id
-         WHERE a.class_id = $1 AND a.teacher_username = $2
-           AND (s.stream IS NULL OR s.stream = c.stream)
-         ORDER BY s.name`,
-        [classId, req.user.username]
-      )
-      : await pool.query(
-        `SELECT DISTINCT s.id, s.name, s.class_name, s.stream
-         FROM allocations a
-         JOIN subjects s ON s.id = a.subject_id
-         JOIN classes c ON c.id = a.class_id
-         WHERE a.class_id = $1
-           AND (s.stream IS NULL OR s.stream = c.stream)
-         ORDER BY s.name`,
-        [classId]
-      );
-    const scoresResult = req.user.role === 'teacher'
-      ? await pool.query(
-        `SELECT lr.learner_id, lr.subject_id, lr.ca1, lr.ca2, lr.exam
-         FROM learner_results lr
-         JOIN allocations a ON a.class_id = lr.class_id AND a.subject_id = lr.subject_id
-         JOIN subjects s ON s.id = lr.subject_id
-         JOIN classes c ON c.id = lr.class_id
-         WHERE lr.class_id = $1 AND lr.term = $2 AND lr.session_year = $3
-           AND (s.stream IS NULL OR s.stream = c.stream)
-           AND a.teacher_username = $4`,
-        [classId, term, sessionYear, req.user.username]
-      )
-      : await pool.query(
-        `SELECT lr.learner_id, lr.subject_id, lr.ca1, lr.ca2, lr.exam
-         FROM learner_results lr
-         JOIN subjects s ON s.id = lr.subject_id
-         JOIN classes c ON c.id = lr.class_id
-         WHERE lr.class_id = $1 AND lr.term = $2 AND lr.session_year = $3
-           AND (s.stream IS NULL OR s.stream = c.stream)`,
-        [classId, term, sessionYear]
-      );
+    const subjectsResult = await pool.query(
+      `SELECT DISTINCT s.id, s.name, s.class_name, s.stream
+       FROM allocations a
+       JOIN subjects s ON s.id = a.subject_id
+       JOIN classes c ON c.id = a.class_id
+       WHERE a.class_id = $1
+         AND (s.stream IS NULL OR s.stream = c.stream)
+       ORDER BY s.name`,
+      [classId]
+    );
+    const scoresResult = await pool.query(
+      `SELECT lr.learner_id, lr.subject_id, lr.ca1, lr.ca2, lr.exam
+       FROM learner_results lr
+       JOIN subjects s ON s.id = lr.subject_id
+       JOIN classes c ON c.id = lr.class_id
+       WHERE lr.class_id = $1 AND lr.term = $2 AND lr.session_year = $3
+         AND (s.stream IS NULL OR s.stream = c.stream)`,
+      [classId, term, sessionYear]
+    );
     const commentsResult = await pool.query(
       `SELECT learner_id, principal_comment, teacher_comment
        FROM learner_comments
