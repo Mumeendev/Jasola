@@ -1860,14 +1860,16 @@ app.post('/api/allocate', requireRole('admin'), async (req, res) => {
 
 app.put('/api/allocate', requireRole('admin'), async (req, res) => {
   const { teacherUsername, subjectIds } = req.body;
-  const classId = Number(req.body.classId);
+  const classIds = Array.isArray(req.body.classIds)
+    ? [...new Set(req.body.classIds.map(Number))]
+    : [Number(req.body.classId)];
   if (
     typeof teacherUsername !== 'string' ||
-    !Number.isInteger(classId) || classId <= 0 ||
+    !classIds.length || classIds.some((id) => !Number.isInteger(id) || id <= 0) ||
     !Array.isArray(subjectIds) ||
     subjectIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)
   ) {
-    return res.status(400).json({ error: 'A teacher and a list of valid subjects are required.' });
+    return res.status(400).json({ error: 'A teacher, one or more classes, and a list of valid subjects are required.' });
   }
   const ids = [...new Set(subjectIds.map(Number))];
   const client = await pool.connect();
@@ -1882,12 +1884,12 @@ app.put('/api/allocate', requireRole('admin'), async (req, res) => {
       return res.status(404).json({ error: 'Teacher not found.' });
     }
     const classResult = await client.query(
-      'SELECT class_name, stream FROM classes WHERE id = $1 AND is_active = TRUE',
-      [classId]
+      'SELECT id, class_name, stream FROM classes WHERE id = ANY($1::int[]) AND is_active = TRUE',
+      [classIds]
     );
-    if (!classResult.rows.length) {
+    if (classResult.rows.length !== classIds.length) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Class not found.' });
+      return res.status(404).json({ error: 'One or more classes were not found.' });
     }
     const subjects = ids.length
       ? await client.query('SELECT id, name, class_name, stream FROM subjects WHERE id = ANY($1::int[]) AND is_active = TRUE', [ids])
@@ -1896,26 +1898,30 @@ app.put('/api/allocate', requireRole('admin'), async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'One or more selected subjects do not exist.' });
     }
-    if (subjects.rows.some((subject) => !isSubjectAllowedForClass(subject, classResult.rows[0]))) {
+    if (classResult.rows.some(classRow =>
+      subjects.rows.some(subject => !isSubjectAllowedForClass(subject, classRow))
+    )) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'One or more selected subjects are not available for this class or stream.' });
+      return res.status(400).json({ error: 'One or more selected subjects are not available for every selected class or stream.' });
     }
 
-    await client.query(
-      `DELETE FROM allocations a
-       USING subjects s
-       WHERE a.subject_id = s.id AND s.is_active = TRUE
-         AND a.teacher_username = $1 AND a.class_id = $2`,
-      [teacherUsername, classId]
-    );
-    for (const subject of subjects.rows) {
+    for (const classId of classIds) {
       await client.query(
-        'INSERT INTO allocations (teacher_username, subject_name, subject_id, class_id) VALUES ($1, $2, $3, $4)',
-        [teacherUsername, subject.name, subject.id, classId]
+        `DELETE FROM allocations a
+         USING subjects s
+         WHERE a.subject_id = s.id AND s.is_active = TRUE
+           AND a.teacher_username = $1 AND a.class_id = $2`,
+        [teacherUsername, classId]
       );
+      for (const subject of subjects.rows) {
+        await client.query(
+          'INSERT INTO allocations (teacher_username, subject_name, subject_id, class_id) VALUES ($1, $2, $3, $4)',
+          [teacherUsername, subject.name, subject.id, classId]
+        );
+      }
     }
     await client.query('COMMIT');
-    res.json({ success: true, classId, subjectIds: ids });
+    res.json({ success: true, classIds, subjectIds: ids });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Saving teacher allocations failed:', err);

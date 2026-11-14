@@ -36,14 +36,15 @@
 <body>
     <main>
         <h1>Allocate Class and Subjects</h1>
-        <p>Choose the teacher and class, then select every subject they can upload for that class.</p>
+        <p>Choose a teacher and one or more classes, then select the subjects they can upload in every selected class.</p>
         <form id="allocation-form">
             <label for="teacher">Teacher</label>
             <select id="teacher" required><option value="">Loading teachers…</option></select>
             <label for="class">Class and section</label>
-            <select id="class" required><option value="">Loading classes…</option></select>
-            <label>Subjects allocated for this class</label>
-            <div class="subjects" id="subjects"><p>Select a teacher and class.</p></div>
+            <select id="class" multiple size="6" required aria-describedby="class-help"><option value="">Loading classes…</option></select>
+            <p id="class-help" class="helper">Use Ctrl-click (Windows/Linux) or Command-click (Mac) to select multiple classes. Saving replaces the selected classes' allocations with the same subject list.</p>
+            <label>Subjects allocated for the selected classes</label>
+            <div class="subjects" id="subjects"><p>Select a teacher and one or more classes.</p></div>
             <p class="helper">Uncheck a subject and save to remove that allocation.</p>
             <div class="form-actions">
                 <button type="submit">Save Allocation</button>
@@ -89,6 +90,12 @@
             return window.resolvePortalApiBase();
         }
 
+        function selectedClassIds() {
+            return [...classSelect.selectedOptions]
+                .map(option => Number(option.value))
+                .filter(id => Number.isInteger(id) && id > 0);
+        }
+
         async function loadOptions() {
             try {
                 const baseUrl = await apiBase();
@@ -110,7 +117,7 @@
                     option.textContent = `${item.surname} ${item.othername} (@${item.username})`;
                     teacherSelect.appendChild(option);
                 });
-                classSelect.innerHTML = '<option value="">Select class and section</option>';
+                classSelect.innerHTML = '';
                 classes.forEach(item => {
                     const option = document.createElement('option');
                     option.value = item.id;
@@ -187,32 +194,35 @@
 
         function renderSubjects(selectedIds) {
             subjectList.replaceChildren();
-            const selectedClass = allClasses.find(item => Number(item.id) === Number(classSelect.value));
-            if (!selectedClass) {
-                subjectList.textContent = 'Select a class to see its subjects.';
+            const selectedClasses = allClasses.filter(item => selectedClassIds().includes(Number(item.id)));
+            if (!selectedClasses.length) {
+                subjectList.textContent = 'Select one or more classes to see their shared subjects.';
                 return;
             }
-            const className = selectedClass.class_name.toLowerCase();
-            const isJuniorSecondary = /junior\s+secondary|\bjss?\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(className);
-            const isSeniorSecondary = !isJuniorSecondary &&
-                /senior\s+secondary|\bsss?\s*[-.]?\s*(?:[1-3]|one|two|three)\b|\bsecondary\b/i.test(className);
-            const category = isJuniorSecondary
-                ? 'Junior Secondary'
-                : isSeniorSecondary
-                    ? 'Secondary'
-                    : /primary|\bbasic\s*[-.]?\s*(?:[1-5]|one|two|three|four|five)\b|\bpry\s*[-.]?\s*[1-6]\b/i.test(className)
-                    ? 'Primary'
-                    : /creche|reception|nursery|kindergarten|\bkg\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(className)
-                        ? 'Creche'
-                        : '';
+            const eligibleIds = selectedClasses.map(selectedClass => {
+                const className = selectedClass.class_name.toLowerCase();
+                const isJuniorSecondary = /junior\s+secondary|\bjss?\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(className);
+                const isSeniorSecondary = !isJuniorSecondary &&
+                    /senior\s+secondary|\bsss?\s*[-.]?\s*(?:[1-3]|one|two|three)\b|\bsecondary\b/i.test(className);
+                const category = isJuniorSecondary
+                    ? 'Junior Secondary'
+                    : isSeniorSecondary
+                        ? 'Secondary'
+                        : /primary|\bbasic\s*[-.]?\s*(?:[1-5]|one|two|three|four|five)\b|\bpry\s*[-.]?\s*[1-6]\b/i.test(className)
+                        ? 'Primary'
+                        : /creche|reception|nursery|kindergarten|\bkg\s*[-.]?\s*(?:[1-3]|one|two|three)\b/i.test(className)
+                            ? 'Creche'
+                            : '';
+                return new Set(allSubjects.filter(subject =>
+                    (!category || subject.class_name === category) &&
+                    (!subject.stream || subject.stream === selectedClass.stream)
+                ).map(subject => Number(subject.id)));
+            });
             const eligibleSubjects = allSubjects.filter(subject =>
-                (!category || subject.class_name === category) &&
-                (!subject.stream || subject.stream === selectedClass.stream)
+                eligibleIds.every(ids => ids.has(Number(subject.id)))
             );
             if (!eligibleSubjects.length) {
-                subjectList.textContent = selectedClass.stream
-                    ? `No ${selectedClass.stream} subjects are available. Add subjects in the subject catalog first.`
-                    : 'No subjects are available for this class category.';
+                subjectList.textContent = 'No shared subjects are available for all selected classes.';
                 return;
             }
             if (!allSubjects.length) {
@@ -248,7 +258,8 @@
             const version = ++allocationVersion;
             credentials.hidden = true;
             status.textContent = '';
-            if (!teacherSelect.value || !classSelect.value) {
+            const classIds = selectedClassIds();
+            if (!teacherSelect.value || !classIds.length) {
                 renderSubjects([]);
                 return;
             }
@@ -261,14 +272,18 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Unable to load allocation.');
                 if (version !== allocationVersion) return;
-                const current = data.allocations
-                    .filter(item => Number(item.classId) === Number(classSelect.value))
-                    .map(item => Number(item.subjectId));
+                const currentByClass = classIds.map(classId => new Set(data.allocations
+                    .filter(item => Number(item.classId) === classId)
+                    .map(item => Number(item.subjectId))));
+                const current = [...(currentByClass[0] || new Set())]
+                    .filter(subjectId => currentByClass.every(ids => ids.has(subjectId)));
                 renderSubjects(current);
                 status.textContent = current.length
-                    ? `${current.length} subject(s) currently allocated for this class.`
-                    : 'No subjects allocated for this class yet.';
-                if (current.length) showTeacherLoginButton(teacherSelect.value);
+                    ? `${current.length} subject(s) currently allocated in every selected class.`
+                    : 'No subjects are currently allocated in every selected class.';
+                if (data.allocations.some(item => classIds.includes(Number(item.classId)))) {
+                    showTeacherLoginButton(teacherSelect.value);
+                }
             } catch (error) {
                 status.textContent = error.message || 'Unable to load allocation.';
             }
@@ -283,9 +298,9 @@
 
         async function saveAllocation(subjectIds) {
             const teacherUsername = teacherSelect.value;
-            const classId = Number(classSelect.value);
-            if (!teacherUsername || !classId) {
-                status.textContent = 'Choose a teacher and class.';
+            const classIds = selectedClassIds();
+            if (!teacherUsername || !classIds.length) {
+                status.textContent = 'Choose a teacher and one or more classes.';
                 return false;
             }
             try {
@@ -293,11 +308,11 @@
                 const response = await fetch(`${baseUrl}/api/allocate`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ teacherUsername, classId, subjectIds })
+                    body: JSON.stringify({ teacherUsername, classIds, subjectIds })
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Unable to save allocation.');
-                status.textContent = `Saved ${subjectIds.length} subject(s) for ${teacherUsername} in this class.`;
+                status.textContent = `Saved ${subjectIds.length} subject(s) for ${teacherUsername} in ${classIds.length} class(es).`;
                 await loadAllocationList();
                 if (subjectIds.length) {
                     showTeacherLoginButton(teacherUsername);
@@ -313,11 +328,11 @@
         }
 
         document.getElementById('clear-allocations').addEventListener('click', async () => {
-            if (!teacherSelect.value || !classSelect.value) {
-                status.textContent = 'Choose a teacher and class.';
+            if (!teacherSelect.value || !selectedClassIds().length) {
+                status.textContent = 'Choose a teacher and one or more classes.';
                 return;
             }
-            if (!confirm(`Remove every subject allocation for ${teacherSelect.value} in this class?`)) return;
+            if (!confirm(`Remove every subject allocation for ${teacherSelect.value} in the selected class(es)?`)) return;
             if (await saveAllocation([])) renderSubjects([]);
         });
         document.getElementById('refresh-allocations').addEventListener('click', loadAllocationList);
