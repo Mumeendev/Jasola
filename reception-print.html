@@ -5,40 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Print Reception Results - Jasola Model School</title>
     <style>
-        * { box-sizing:border-box; }
-        body { margin:0; padding:1.5rem; background:#edf2f7; color:#1a202c; font-family:Arial,Helvetica,sans-serif; }
-        main { max-width:1200px; margin:0 auto; padding:1.5rem; background:#fff; }
-        .toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
-        .filters { display:flex; align-items:end; gap:.75rem; flex-wrap:wrap; margin:1rem 0; }
-        label { display:grid; gap:.35rem; font-weight:600; }
-        select,input { min-width:170px; padding:.65rem; border:1px solid #a0aec0; border-radius:5px; font:inherit; }
-        button,.button { display:inline-block; padding:.7rem 1rem; border:0; border-radius:5px; background:#2c5282; color:#fff; font:inherit; text-decoration:none; cursor:pointer; }
-        .button.secondary { background:#4a5568; }
-        h1,h2 { color:#1a365d; }
-        .school-heading { text-align:center; border-bottom:2px solid #2c5282; margin-bottom:1rem; padding-bottom:.75rem; }
-        .school-heading img { display:block; width:70px; height:70px; margin:0 auto .35rem; object-fit:contain; }
-        .school-heading h1,.school-heading p { margin:.2rem; }
-        .school-levels { color:#2c5282; font-weight:700; letter-spacing:.08em; }
-        .details { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; font-weight:600; }
-        #status { min-height:1.5rem; color:#4a5568; }
-        .table-wrap { overflow:auto; border:1px solid #cbd5e0; }
-        table { width:100%; min-width:850px; border-collapse:collapse; }
-        th,td { padding:.5rem; border:1px solid #718096; text-align:center; }
-        th { background:#1f4e78; color:#fff; }
-        th:first-child,td:first-child,th:nth-child(2),td:nth-child(2) { text-align:left; }
-        .mark-scale { display:block; margin-top:.25rem; font-size:.75rem; font-weight:400; }
-        .summary { display:grid; grid-template-columns:repeat(2,minmax(150px,1fr)); gap:.75rem; margin-top:1rem; }
-        .summary div { padding:.7rem; border:1px solid #a0aec0; }
-        .summary strong { display:block; margin-bottom:.2rem; }
-        @page { size:A4 landscape; margin:10mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 1.5rem; background: #edf2f7; color: #1a202c; font-family: Arial, Helvetica, sans-serif; }
+        main { max-width: 1000px; margin: 0 auto; padding: 1.5rem; background: #fff; }
+        .toolbar, .filters { display: flex; align-items: end; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+        .toolbar { align-items: center; margin-bottom: 1rem; }
+        .filters { justify-content: flex-start; margin: 1rem 0; }
+        label { display: grid; gap: .35rem; font-weight: 600; }
+        select, input { min-width: 170px; padding: .65rem; border: 1px solid #a0aec0; border-radius: 5px; font: inherit; }
+        button, .button { display: inline-block; padding: .7rem 1rem; border: 0; border-radius: 5px; background: #2c5282; color: #fff; font: inherit; text-decoration: none; cursor: pointer; }
+        button:disabled { opacity: .6; cursor: wait; }
+        .button.secondary { background: #4a5568; }
+        #status { min-height: 1.5rem; color: #4a5568; }
+        .report-card { margin: 0 auto 1.5rem; padding: 12mm; background: #fff; border: 1px solid #cbd5e0; }
+        .school-heading { text-align: center; border-bottom: 2px solid #2c5282; margin-bottom: 1rem; padding-bottom: .75rem; }
+        .school-heading img { display: block; width: 70px; height: 70px; margin: 0 auto .35rem; object-fit: contain; }
+        .school-heading h1, .school-heading p { margin: .2rem; }
+        .school-levels { color: #2c5282; font-weight: 700; letter-spacing: .08em; }
+        .learner-details { display: flex; justify-content: space-between; gap: .75rem 1.5rem; flex-wrap: wrap; margin: .75rem 0; font-weight: 600; }
+        .report-card h2 { margin: 1rem 0 .5rem; color: #1a365d; }
+        table { width: 100%; border-collapse: collapse; margin: .6rem 0 1rem; }
+        th, td { padding: .55rem; border: 1px solid #718096; text-align: center; }
+        th { background: #e2e8f0; }
+        th:first-child, td:first-child { text-align: left; }
+        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-top: 1rem; }
+        .summary div { padding: .65rem; border: 1px solid #a0aec0; text-align: center; }
+        .summary strong { display: block; margin-bottom: .2rem; }
+        @page { size: A4 portrait; margin: 10mm; }
         @media print {
-            body { padding:0; background:#fff; }
-            main { max-width:none; padding:0; }
-            .toolbar,.filters,#status { display:none !important; }
-            .table-wrap { overflow:visible; border:0; }
-            table { min-width:0; font-size:8pt; }
-            th,td { padding:3px; }
-            th { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+            body { padding: 0; background: #fff; }
+            main { max-width: none; padding: 0; }
+            .toolbar, .filters, #status { display: none !important; }
+            .report-card { margin: 0; padding: 3mm; border: 0; break-after: page; page-break-after: always; }
+            .report-card:last-child { break-after: auto; page-break-after: auto; }
+            th { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        }
+        @media (max-width: 600px) {
+            body { padding: .5rem; }
+            main { padding: .75rem; }
+            .report-card { padding: .75rem; }
+            .summary { grid-template-columns: 1fr; }
         }
     </style>
     <link rel="stylesheet" href="responsive.css">
@@ -46,8 +52,8 @@
 <body>
     <main>
         <div class="toolbar">
-            <a class="button secondary" id="back-link" href="more-options.html">More Options</a>
-            <button type="button" onclick="window.print()">Print Reception Results</button>
+            <a class="button secondary" href="more-options.html">More Options</a>
+            <button type="button" id="print-button" disabled>Print Reception Results</button>
         </div>
         <form id="selection-form" class="filters">
             <label for="class">Reception class
@@ -65,43 +71,30 @@
                 <input id="session" type="text" inputmode="numeric" pattern="[0-9]{4}/[0-9]{4}"
                        placeholder="e.g. 2026/2027" title="Enter the session as YYYY/YYYY" required>
             </label>
-            <button type="submit">Show Results</button>
+            <button type="submit" id="show-button">Show Results</button>
         </form>
         <p id="status" role="status">Choose a class, term, and session.</p>
-        <section id="results" hidden>
-            <div class="school-heading">
-                <img src="images/WhatsApp%20Image%202026-11-11%20at%206.03.41%20PM.jpeg" alt="Jasola Model School logo">
-                <h1>JASOLA MODEL SCHOOL</h1>
-                <p class="school-levels">RECEPTION RESULTS</p>
-                <p>9A Temidire Street, Ganmo, Kwara State</p>
-            </div>
-            <div class="details">
-                <p id="class-details"></p>
-                <p id="term-details"></p>
-            </div>
-            <div class="table-wrap">
-                <table>
-                    <thead id="result-head"></thead>
-                    <tbody id="result-body"></tbody>
-                </table>
-            </div>
-            <section id="summary" class="summary"></section>
-        </section>
+        <section id="results"></section>
     </main>
     <script src="auth.js"></script>
     <script>
         const role = sessionStorage.getItem('role');
-        if (role === 'teacher') {
-            document.getElementById('back-link').href = 'teacher-dashboard.html';
-            document.getElementById('back-link').textContent = 'Teacher Page';
+        if (role !== 'admin') {
+            document.querySelector('main').hidden = true;
+            window.location.replace(role === 'teacher' ? 'teacher-dashboard.html' : 'login.html');
         }
 
         const classSelect = document.getElementById('class');
-        const status = document.getElementById('status');
         const results = document.getElementById('results');
-        const resultHead = document.getElementById('result-head');
-        const resultBody = document.getElementById('result-body');
-        const summary = document.getElementById('summary');
+        const status = document.getElementById('status');
+        const printButton = document.getElementById('print-button');
+        const skillFields = [
+            ['literacy_skill', 'Literacy skill'],
+            ['number_skill', 'Number skill'],
+            ['writing_skill', 'Writing skills'],
+            ['creative_skill', 'Creative skill'],
+            ['behaviour_skill', 'Behaviour']
+        ];
 
         async function loadClasses() {
             try {
@@ -109,108 +102,185 @@
                 const response = await fetch(`${baseUrl}/api/reception/classes`);
                 const classes = await response.json();
                 if (!response.ok) throw new Error(classes.error || 'Unable to load Reception classes.');
-                classSelect.innerHTML = '<option value="">Select Reception class</option>';
-                classes.forEach(item => classSelect.add(new Option(
-                    `${item.class_name} - ${item.section}`, item.id
+                classSelect.replaceChildren(new Option('Select Reception class', ''));
+                classes.forEach(classRow => classSelect.add(new Option(
+                    `${classRow.class_name} - ${classRow.section}`, classRow.id
                 )));
                 if (!classes.length) {
-                    classSelect.innerHTML = '<option value="">No assigned Reception classes</option>';
-                    status.textContent = role === 'admin'
-                        ? 'Add a Reception class before printing results.'
-                        : 'You are not assigned as the teacher of a Reception class.';
+                    classSelect.replaceChildren(new Option('No Reception classes found', ''));
+                    status.textContent = 'Add a Reception or KG One class before printing results.';
                 }
             } catch (error) {
-                classSelect.innerHTML = '<option value="">Unable to load classes</option>';
+                classSelect.replaceChildren(new Option('Unable to load classes', ''));
                 status.textContent = error.message || 'Unable to load Reception classes.';
             }
         }
 
+        function createCell(row, value, tag = 'td') {
+            const cell = document.createElement(tag);
+            cell.textContent = value === null || value === undefined || value === ''
+                ? '—'
+                : String(value);
+            row.appendChild(cell);
+            return cell;
+        }
+
         function renderResults(data) {
-            resultHead.replaceChildren();
-            resultBody.replaceChildren();
-            const header = document.createElement('tr');
-            ['No.', 'Learner'].forEach(label => {
-                const cell = document.createElement('th');
-                cell.textContent = label;
-                header.appendChild(cell);
-            });
-            data.subjects.forEach(subject => {
-                const cell = document.createElement('th');
-                cell.textContent = subject.name;
-                const scale = document.createElement('span');
-                scale.className = 'mark-scale';
-                scale.textContent = '5 · 4 · 3 · 2 · 1';
-                cell.appendChild(scale);
-                header.appendChild(cell);
-            });
-            ['Mark obtained', 'Mark obtainable', 'Total %'].forEach(label => {
-                const cell = document.createElement('th');
-                cell.textContent = label;
-                header.appendChild(cell);
-            });
-            resultHead.appendChild(header);
-
-            const totals = [];
-            data.learners.forEach((learner, index) => {
-                const row = document.createElement('tr');
-                const name = `${learner.surname} ${learner.othername}` +
-                    (learner.admission_number ? ` (${learner.admission_number})` : '');
-                [index + 1, name].forEach(value => {
-                    const cell = document.createElement('td');
-                    cell.textContent = String(value);
-                    row.appendChild(cell);
-                });
-                let obtained = 0;
-                let anyMark = false;
-                data.subjects.forEach(subject => {
-                    const saved = data.marks.find(mark =>
-                        mark.learner_id === learner.id && mark.subject_id === subject.id
-                    );
-                    const mark = saved && saved.mark !== null ? Number(saved.mark) : null;
-                    if (mark !== null) {
-                        obtained += mark;
-                        anyMark = true;
-                    }
-                    const cell = document.createElement('td');
-                    cell.textContent = mark === null ? '—' : String(mark);
-                    row.appendChild(cell);
-                });
+            results.replaceChildren();
+            const marksByKey = new Map(data.marks.map(mark => [
+                `${mark.learner_id}:${mark.subject_id}`,
+                mark.mark === null ? null : Number(mark.mark)
+            ]));
+            const skillsByLearner = new Map(data.skills.map(skills => [
+                skills.learner_id,
+                skills
+            ]));
+            const learnerTotals = data.learners.map(learner => {
+                const marks = data.subjects
+                    .map(subject => marksByKey.get(`${learner.id}:${subject.id}`))
+                    .filter(mark => mark !== null && mark !== undefined);
+                const obtained = marks.reduce((sum, mark) => sum + mark, 0);
                 const obtainable = data.subjects.length * 5;
-                [obtained, obtainable || '—', obtainable ? `${(obtained / obtainable * 100).toFixed(2)}%` : '—']
-                    .forEach(value => {
-                        const cell = document.createElement('td');
-                        cell.textContent = String(value);
-                        row.appendChild(cell);
-                    });
-                if (anyMark) totals.push(obtained);
-                resultBody.appendChild(row);
+                return {
+                    learnerId: learner.id,
+                    obtained,
+                    obtainable,
+                    percentage: marks.length && obtainable ? obtained / obtainable * 100 : null
+                };
+            });
+            const assessedTotals = learnerTotals.filter(item => item.percentage !== null);
+            const classHighest = assessedTotals.length
+                ? Math.max(...assessedTotals.map(item => item.percentage))
+                : null;
+            const classLowest = assessedTotals.length
+                ? Math.min(...assessedTotals.map(item => item.percentage))
+                : null;
+
+            data.learners.forEach(learner => {
+                const total = learnerTotals.find(item => item.learnerId === learner.id);
+                const card = document.createElement('article');
+                card.className = 'report-card';
+
+                const heading = document.createElement('header');
+                heading.className = 'school-heading';
+                const logo = document.createElement('img');
+                logo.src = 'images/WhatsApp%20Image%202026-11-11%20at%206.03.41%20PM.jpeg';
+                logo.alt = 'Jasola Model School logo';
+                const schoolName = document.createElement('h1');
+                schoolName.textContent = 'JASOLA MODEL SCHOOL';
+                const title = document.createElement('p');
+                title.className = 'school-levels';
+                title.textContent = 'RECEPTION RESULTS';
+                const address = document.createElement('p');
+                address.textContent = '9A Temidire Street, Ganmo, Kwara State';
+                heading.append(logo, schoolName, title, address);
+                card.appendChild(heading);
+
+                const details = document.createElement('div');
+                details.className = 'learner-details';
+                [
+                    `Learner: ${learner.surname} ${learner.othername}`,
+                    learner.admission_number ? `Admission no.: ${learner.admission_number}` : null,
+                    `Class: ${data.class.class_name} - ${data.class.section}`,
+                    `${document.getElementById('term').value} | ${document.getElementById('session').value.trim()}`
+                ].filter(Boolean).forEach(detail => {
+                    const item = document.createElement('span');
+                    item.textContent = detail;
+                    details.appendChild(item);
+                });
+                card.appendChild(details);
+
+                const skillsHeading = document.createElement('h2');
+                skillsHeading.textContent = 'Reception Skills';
+                card.appendChild(skillsHeading);
+                const skillsTable = document.createElement('table');
+                const skillsHead = document.createElement('thead');
+                const skillsHeader = document.createElement('tr');
+                createCell(skillsHeader, 'Skill', 'th');
+                createCell(skillsHeader, 'Rating (out of 5)', 'th');
+                skillsHead.appendChild(skillsHeader);
+                skillsTable.appendChild(skillsHead);
+                const skillsBody = document.createElement('tbody');
+                const learnerSkills = skillsByLearner.get(learner.id) || {};
+                skillFields.forEach(([field, label]) => {
+                    const row = document.createElement('tr');
+                    createCell(row, label);
+                    createCell(row, learnerSkills[field]);
+                    skillsBody.appendChild(row);
+                });
+                skillsTable.appendChild(skillsBody);
+                card.appendChild(skillsTable);
+
+                const subjectsHeading = document.createElement('h2');
+                subjectsHeading.textContent = 'Subject Marks';
+                card.appendChild(subjectsHeading);
+                const subjectTable = document.createElement('table');
+                const subjectHead = document.createElement('thead');
+                const subjectHeader = document.createElement('tr');
+                ['Subject', 'Mark obtained', 'Mark obtainable', 'Percentage'].forEach(label =>
+                    createCell(subjectHeader, label, 'th')
+                );
+                subjectHead.appendChild(subjectHeader);
+                subjectTable.appendChild(subjectHead);
+                const subjectBody = document.createElement('tbody');
+                data.subjects.forEach(subject => {
+                    const row = document.createElement('tr');
+                    createCell(row, subject.name);
+                    const mark = marksByKey.get(`${learner.id}:${subject.id}`);
+                    createCell(row, mark);
+                    createCell(row, 5);
+                    createCell(row, mark === null || mark === undefined
+                        ? null
+                        : `${(mark / 5 * 100).toFixed(2)}%`);
+                    subjectBody.appendChild(row);
+                });
+                const totalRow = document.createElement('tr');
+                createCell(totalRow, 'Total', 'th');
+                createCell(totalRow, total.obtained, 'th');
+                createCell(totalRow, total.obtainable || null, 'th');
+                createCell(totalRow, total.percentage === null
+                    ? null
+                    : `${total.percentage.toFixed(2)}%`, 'th');
+                subjectBody.appendChild(totalRow);
+                if (!data.subjects.length) {
+                    const emptyRow = document.createElement('tr');
+                    const emptyCell = createCell(emptyRow, 'No subjects are assigned to this class.');
+                    emptyCell.colSpan = 4;
+                    subjectBody.insertBefore(emptyRow, totalRow);
+                }
+                subjectTable.appendChild(subjectBody);
+                card.appendChild(subjectTable);
+
+                const summary = document.createElement('section');
+                summary.className = 'summary';
+                [
+                    ['Total percentage', total.percentage],
+                    ['Class highest percentage', classHighest],
+                    ['Class lowest percentage', classLowest]
+                ].forEach(([label, percentage]) => {
+                    const item = document.createElement('div');
+                    const strong = document.createElement('strong');
+                    strong.textContent = label;
+                    item.append(strong, document.createTextNode(
+                        percentage === null ? '—' : `${percentage.toFixed(2)}%`
+                    ));
+                    summary.appendChild(item);
+                });
+                card.appendChild(summary);
+                results.appendChild(card);
             });
 
-            summary.replaceChildren();
-            [
-                ['Class highest', totals.length ? Math.max(...totals) : '—'],
-                ['Class lowest', totals.length ? Math.min(...totals) : '—']
-            ].forEach(([label, value]) => {
-                const item = document.createElement('div');
-                const heading = document.createElement('strong');
-                heading.textContent = label;
-                item.append(heading, document.createTextNode(value));
-                summary.appendChild(item);
-            });
-            document.getElementById('class-details').textContent =
-                `Class: ${data.class.class_name} - ${data.class.section}`;
-            document.getElementById('term-details').textContent =
-                `${document.getElementById('term').value} | ${document.getElementById('session').value.trim()}`;
-            results.hidden = false;
-            status.textContent = data.subjects.length
-                ? `${data.learners.length} learner(s) loaded.`
-                : 'No subjects are assigned to this Reception class. Allocate its subjects before printing.';
+            printButton.disabled = !data.learners.length;
+            status.textContent = data.learners.length
+                ? `${data.learners.length} individual Reception report card(s) ready to print.`
+                : 'No learners are registered in this class.';
         }
 
         document.getElementById('selection-form').addEventListener('submit', async event => {
             event.preventDefault();
-            results.hidden = true;
-            status.textContent = 'Loading Reception results…';
+            printButton.disabled = true;
+            results.replaceChildren();
+            status.textContent = 'Loading Reception report cards…';
             try {
                 const query = new URLSearchParams({
                     classId: classSelect.value,
@@ -218,15 +288,16 @@
                     sessionYear: document.getElementById('session').value.trim()
                 });
                 const baseUrl = await window.resolvePortalApiBase();
-                const response = await fetch(`${baseUrl}/api/reception/sheet?${query}`);
+                const response = await fetch(`${baseUrl}/api/reception/print-sheet?${query}`);
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Unable to load Reception results.');
+                if (!response.ok) throw new Error(data.error || 'Unable to load Reception report cards.');
                 renderResults(data);
             } catch (error) {
-                status.textContent = error.message || 'Unable to load Reception results.';
+                status.textContent = error.message || 'Unable to load Reception report cards.';
             }
         });
 
+        printButton.addEventListener('click', () => window.print());
         loadClasses();
     </script>
 </body>

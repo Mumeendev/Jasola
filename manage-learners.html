@@ -34,6 +34,7 @@
             </div>
             <div class="actions">
                 <a class="button" href="add-learner.html">Add Learner</a>
+                <a class="button" id="promote-learners-link" href="promote-learners.html" hidden>Promote Learners</a>
                 <a class="button" href="dashboard.html">Dashboard</a>
             </div>
         </header>
@@ -58,6 +59,8 @@
 
         if (sessionStorage.getItem('role') !== 'admin') {
             window.location.replace('dashboard.html');
+        } else {
+            document.getElementById('promote-learners-link').hidden = false;
         }
 
         async function loadLearners() {

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Promote Learners - Jasola Model School</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 2rem; background: #edf2f7; color: #1a202c; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        main { max-width: 1000px; margin: 0 auto; padding: 2rem; background: #fff; border-radius: 10px; box-shadow: 0 4px 16px #00000014; }
+        header, .actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+        h1 { margin: .25rem 0; color: #1a365d; }
+        .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+        label { display: block; font-weight: 600; }
+        select, input { display: block; width: 100%; margin-top: .5rem; padding: .7rem; border: 1px solid #a0aec0; border-radius: 5px; font: inherit; }
+        button, .button { padding: .65rem .9rem; border: 0; border-radius: 5px; background: #2c5282; color: #fff; text-decoration: none; cursor: pointer; font: inherit; }
+        button:disabled { opacity: .6; cursor: not-allowed; }
+        #status { min-height: 1.5rem; color: #4a5568; }
+        .table-wrap { overflow: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: .75rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        th { background: #2c5282; color: #fff; }
+        .empty { text-align: center; color: #718096; padding: 2rem; }
+        @media (max-width: 600px) { body { padding: 1rem; } main { padding: 1rem; } }
+    </style>
+    <link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <h1>Promote Learners</h1>
+                <p>Move selected learners to another class for the chosen academic session. Previous results remain unchanged.</p>
+            </div>
+            <a class="button" href="dashboard.html">Dashboard</a>
+        </header>
+
+        <form id="promotion-form">
+            <div class="fields">
+                <label for="source-class">Current class
+                    <select id="source-class" required><option value="">Loading classes...</option></select>
+                </label>
+                <label for="session">Promotion session
+                    <input id="session" type="text" inputmode="numeric" pattern="[0-9]{4}/[0-9]{4}"
+                           placeholder="e.g. 2026/2027" title="Enter the session as YYYY/YYYY" required>
+                </label>
+                <label for="destination-class">Promote to class
+                    <select id="destination-class" required><option value="">Loading classes...</option></select>
+                </label>
+            </div>
+
+            <p id="status" role="status">Choose a current class to load its learners.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th><input id="select-all" type="checkbox" aria-label="Select all learners"></th>
+                            <th>Surname</th>
+                            <th>Other name</th>
+                            <th>Admission number</th>
+                        </tr>
+                    </thead>
+                    <tbody id="learners">
+                        <tr><td class="empty" colspan="4">Select a current class.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="actions" style="margin-top: 1rem">
+                <span id="selection-count">0 learners selected</span>
+                <button id="promote-button" type="submit" disabled>Promote selected learners</button>
+            </div>
+        </form>
+    </main>
+
+    <script src="auth.js"></script>
+    <script>
+        const sourceClass = document.getElementById('source-class');
+        const destinationClass = document.getElementById('destination-class');
+        const learnerList = document.getElementById('learners');
+        const selectAll = document.getElementById('select-all');
+        const promoteButton = document.getElementById('promote-button');
+        const status = document.getElementById('status');
+        const sessionInput = document.getElementById('session');
+
+        if (sessionStorage.getItem('role') !== 'admin') {
+            window.location.replace('dashboard.html');
+        }
+
+        function selectedLearnerIds() {
+            return Array.from(learnerList.querySelectorAll('input[type="checkbox"]:checked'))
+                .map(checkbox => Number(checkbox.value));
+        }
+
+        function updatePromotionButton() {
+            const count = selectedLearnerIds().length;
+            document.getElementById('selection-count').textContent =
+                `${count} learner${count === 1 ? '' : 's'} selected`;
+            promoteButton.disabled = !sourceClass.value || !destinationClass.value ||
+                sourceClass.value === destinationClass.value || !count;
+        }
+
+        async function loadLearners() {
+            learnerList.replaceChildren();
+            selectAll.checked = false;
+            if (!sourceClass.value) {
+                status.textContent = 'Choose a current class to load its learners.';
+                updatePromotionButton();
+                return;
+            }
+
+            status.textContent = 'Loading learners...';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(
+                    `${baseUrl}/api/learners?classId=${encodeURIComponent(sourceClass.value)}`
+                );
+                const learners = await response.json();
+                if (!response.ok) throw new Error(learners.error || 'Unable to load learners.');
+                if (!learners.length) {
+                    learnerList.innerHTML = '<tr><td class="empty" colspan="4">No learners are registered in this class.</td></tr>';
+                    status.textContent = 'There are no learners to promote from this class.';
+                    updatePromotionButton();
+                    return;
+                }
+
+                learners.forEach(learner => {
+                    const row = document.createElement('tr');
+                    const selectionCell = document.createElement('td');
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = learner.id;
+                    checkbox.setAttribute('aria-label', `Select ${learner.surname} ${learner.othername}`);
+                    checkbox.addEventListener('change', updatePromotionButton);
+                    selectionCell.appendChild(checkbox);
+                    row.appendChild(selectionCell);
+                    [learner.surname, learner.othername, learner.admission_number || '-'].forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    });
+                    learnerList.appendChild(row);
+                });
+                status.textContent = `${learners.length} learner(s) in this class. Select the learners to promote.`;
+                updatePromotionButton();
+            } catch (error) {
+                learnerList.innerHTML = '<tr><td class="empty" colspan="4">Unable to load learners.</td></tr>';
+                status.textContent = error.message || 'Unable to load learners.';
+                updatePromotionButton();
+            }
+        }
+
+        async function loadClasses() {
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/classes`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load classes.');
+                [sourceClass, destinationClass].forEach(select => {
+                    select.replaceChildren(new Option('Select class and section', ''));
+                    classes.forEach(classRow => {
+                        select.add(new Option(`${classRow.class_name} - ${classRow.section}`, classRow.id));
+                    });
+                    if (!classes.length) select.replaceChildren(new Option('No active classes found', ''));
+                });
+                status.textContent = classes.length
+                    ? 'Choose a current class to load its learners.'
+                    : 'Create an active class before promoting learners.';
+            } catch (error) {
+                sourceClass.replaceChildren(new Option('Unable to load classes', ''));
+                destinationClass.replaceChildren(new Option('Unable to load classes', ''));
+                status.textContent = error.message || 'Unable to load classes.';
+            }
+        }
+
+        sourceClass.addEventListener('change', loadLearners);
+        destinationClass.addEventListener('change', updatePromotionButton);
+        sessionInput.addEventListener('input', updatePromotionButton);
+        selectAll.addEventListener('change', () => {
+            learnerList.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = selectAll.checked;
+            });
+            updatePromotionButton();
+        });
+
+        document.getElementById('promotion-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            const learnerIds = selectedLearnerIds();
+            if (!learnerIds.length || sourceClass.value === destinationClass.value) return;
+            const destinationName = destinationClass.options[destinationClass.selectedIndex].text;
+            if (!window.confirm(`Promote ${learnerIds.length} selected learner(s) to ${destinationName} for ${sessionInput.value}?`)) {
+                return;
+            }
+
+            promoteButton.disabled = true;
+            status.textContent = 'Promoting learners...';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/learners/promote`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fromClassId: Number(sourceClass.value),
+                        toClassId: Number(destinationClass.value),
+                        sessionYear: sessionInput.value.trim(),
+                        learnerIds
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to promote learners.');
+                await loadLearners();
+                status.textContent = `${data.promoted} learner(s) promoted to ${destinationName} for ${sessionInput.value}.`;
+            } catch (error) {
+                status.textContent = error.message || 'Unable to promote learners.';
+                updatePromotionButton();
+            }
+        });
+
+        loadClasses();
+    </script>
+</body>
+</html>

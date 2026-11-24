@@ -50,6 +50,15 @@ async function init() {
     `);
     await client.query('ALTER TABLE classes ADD COLUMN IF NOT EXISTS stream VARCHAR(20);');
     await client.query('ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;');
+    await client.query(`
+      INSERT INTO classes (class_name, section)
+      SELECT 'KG One', 'General'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM classes
+        WHERE class_name ~* '(^|[^[:alnum:]])kg[[:space:].-]*(one|1)([^[:alnum:]]|$)'
+      )
+      ON CONFLICT (class_name, section) DO NOTHING;
+    `);
 
     // Create Subjects table (refined)
     await client.query(`
@@ -91,6 +100,17 @@ async function init() {
       SET class_id = c.id
       FROM classes c
       WHERE l.class_id IS NULL AND c.class_name = l.class_name AND c.section = 'General';
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS learner_promotions (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        from_class_id INTEGER NOT NULL REFERENCES classes(id),
+        to_class_id INTEGER NOT NULL REFERENCES classes(id),
+        session_year VARCHAR(9) NOT NULL,
+        promoted_by VARCHAR(255) REFERENCES users(username),
+        promoted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     console.log('Learners table created or exists.');
 
@@ -152,6 +172,23 @@ async function init() {
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, subject_id, term, session_year)
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reception_learner_skills (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        literacy_skill SMALLINT CHECK (literacy_skill BETWEEN 1 AND 5),
+        number_skill SMALLINT CHECK (number_skill BETWEEN 1 AND 5),
+        writing_skill SMALLINT CHECK (writing_skill BETWEEN 1 AND 5),
+        creative_skill SMALLINT CHECK (creative_skill BETWEEN 1 AND 5),
+        behaviour_skill SMALLINT CHECK (behaviour_skill BETWEEN 1 AND 5),
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, class_id, term, session_year)
       );
     `);
     await client.query(`

@@ -19,7 +19,7 @@
         .button.secondary { background:#4a5568; }
         #status { min-height:1.5rem; color:#4a5568; }
         .table-wrap { overflow:auto; border:1px solid #cbd5e0; }
-        table { width:100%; min-width:850px; border-collapse:collapse; }
+        table { width:100%; min-width:1400px; border-collapse:collapse; }
         th,td { padding:.55rem; border:1px solid #cbd5e0; text-align:center; }
         th { background:#1f4e78; color:#fff; }
         th:first-child,td:first-child,th:nth-child(2),td:nth-child(2) { text-align:left; }
@@ -46,7 +46,7 @@
         <header>
             <div>
                 <h1>Upload Reception Results</h1>
-                <p>Select 1–5 for each subject. Leave a mark blank until it has been assessed.</p>
+                <p>Enter subject marks and skill ratings separately for each learner. Use 1–5, and leave unassessed scores blank.</p>
             </div>
             <a class="button secondary" id="back-link" href="more-options.html">More Options</a>
         </header>
@@ -78,7 +78,6 @@
         <section id="summary" class="summary" hidden></section>
         <div class="actions">
             <button type="button" id="save-button" disabled>Save Reception Marks</button>
-            <a class="button" id="print-link" href="reception-print.html" hidden>Print Reception Results</a>
         </div>
     </main>
     <script src="auth.js"></script>
@@ -126,25 +125,39 @@
             return saved && saved.mark !== null ? String(saved.mark) : '';
         }
 
+        function learnerSkill(learnerId, field) {
+            const saved = currentSheet.skills.find(item => item.learner_id === learnerId);
+            return saved && saved[field] !== null ? String(saved[field]) : '';
+        }
+
         function updateSummary() {
             if (!currentSheet) return;
-            const obtainedTotals = [];
+            const percentages = [];
             [...markBody.rows].forEach(row => {
-                const inputs = [...row.querySelectorAll('select')];
+                const inputs = [...row.querySelectorAll('.subject-mark')];
                 const obtained = inputs.reduce((sum, input) =>
                     sum + (input.value ? Number(input.value) : 0), 0);
                 const obtainable = currentSheet.subjects.length * 5;
                 row.querySelector('.mark-obtained').textContent = obtained;
                 row.querySelector('.mark-obtainable').textContent = obtainable || '—';
-                row.querySelector('.total-percent').textContent = obtainable
-                    ? `${(obtained / obtainable * 100).toFixed(2)}%`
-                    : '—';
-                if (inputs.some(input => input.value)) obtainedTotals.push(obtained);
+                const percentage = obtainable
+                    ? obtained / obtainable * 100
+                    : null;
+                row.querySelector('.total-percent').textContent = percentage === null
+                    ? '—'
+                    : `${percentage.toFixed(2)}%`;
+                if (inputs.some(input => input.value) && percentage !== null) {
+                    percentages.push(percentage);
+                }
             });
             summary.replaceChildren();
             [
-                ['Class highest', obtainedTotals.length ? Math.max(...obtainedTotals) : '—'],
-                ['Class lowest', obtainedTotals.length ? Math.min(...obtainedTotals) : '—']
+                ['Class highest percentage', percentages.length
+                    ? `${Math.max(...percentages).toFixed(2)}%`
+                    : '—'],
+                ['Class lowest percentage', percentages.length
+                    ? `${Math.min(...percentages).toFixed(2)}%`
+                    : '—']
             ].forEach(([label, value]) => {
                 const item = document.createElement('div');
                 const heading = document.createElement('strong');
@@ -176,6 +189,22 @@
                 cell.appendChild(scale);
                 header.appendChild(cell);
             });
+            const skills = [
+                ['literacy_skill', 'Literacy skill'],
+                ['number_skill', 'Number skill'],
+                ['writing_skill', 'Writing skills'],
+                ['creative_skill', 'Creative skill'],
+                ['behaviour_skill', 'Behaviour']
+            ];
+            skills.forEach(([, label]) => {
+                const cell = document.createElement('th');
+                cell.textContent = label;
+                const scale = document.createElement('span');
+                scale.className = 'mark-scale';
+                scale.textContent = '5 · 4 · 3 · 2 · 1';
+                cell.appendChild(scale);
+                header.appendChild(cell);
+            });
             ['Mark obtained', 'Mark obtainable', 'Total %'].forEach(label => {
                 const cell = document.createElement('th');
                 cell.rowSpan = 2;
@@ -196,6 +225,7 @@
                 data.subjects.forEach(subject => {
                     const cell = document.createElement('td');
                     const select = document.createElement('select');
+                    select.className = 'subject-mark';
                     select.setAttribute('aria-label', `${subject.name} mark for ${learnerName}`);
                     select.add(new Option('—', ''));
                     [5, 4, 3, 2, 1].forEach(mark =>
@@ -203,6 +233,20 @@
                     );
                     select.value = learnerMark(learner.id, subject.id);
                     select.addEventListener('change', updateSummary);
+                    cell.appendChild(select);
+                    row.appendChild(cell);
+                });
+                skills.forEach(([field]) => {
+                    const cell = document.createElement('td');
+                    const select = document.createElement('select');
+                    select.className = 'skill-mark';
+                    select.dataset.skill = field;
+                    select.setAttribute('aria-label', `${field.replace(/_/g, ' ')} for ${learnerName}`);
+                    select.add(new Option('—', ''));
+                    [5, 4, 3, 2, 1].forEach(mark =>
+                        select.add(new Option(String(mark), String(mark)))
+                    );
+                    select.value = learnerSkill(learner.id, field);
                     cell.appendChild(select);
                     row.appendChild(cell);
                 });
@@ -214,12 +258,11 @@
                 markBody.appendChild(row);
             });
             markTable.hidden = false;
-            document.getElementById('save-button').disabled = !data.subjects.length;
-            document.getElementById('print-link').hidden = false;
+            document.getElementById('save-button').disabled = !data.learners.length;
             updateSummary();
             status.textContent = data.subjects.length
                 ? `${data.learners.length} learner(s) and ${data.subjects.length} subject(s) loaded.`
-                : 'No subjects are assigned to this Reception class. Ask an administrator to allocate its subjects.';
+                : 'No subjects are assigned. You can still enter skill ratings; ask an administrator to allocate subjects for marks.';
         }
 
         document.getElementById('selection-form').addEventListener('submit', async event => {
@@ -227,7 +270,6 @@
             document.getElementById('save-button').disabled = true;
             markTable.hidden = true;
             summary.hidden = true;
-            document.getElementById('print-link').hidden = true;
             status.textContent = 'Loading mark sheet…';
             try {
                 const query = new URLSearchParams({
@@ -251,10 +293,14 @@
             try {
                 const rows = [...markBody.rows].map((row, index) => ({
                     learnerId: currentSheet.learners[index].id,
-                    marks: [...row.querySelectorAll('select')].map((select, subjectIndex) => ({
+                    marks: [...row.querySelectorAll('.subject-mark')].map((select, subjectIndex) => ({
                         subjectId: currentSheet.subjects[subjectIndex].id,
                         mark: select.value ? Number(select.value) : null
-                    }))
+                    })),
+                    skills: Object.fromEntries([...row.querySelectorAll('.skill-mark')].map(select => [
+                        select.dataset.skill.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
+                        select.value ? Number(select.value) : null
+                    ]))
                 }));
                 const baseUrl = await window.resolvePortalApiBase();
                 const response = await fetch(`${baseUrl}/api/reception/sheet`, {
@@ -269,11 +315,11 @@
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || 'Unable to save Reception marks.');
-                status.textContent = `Saved Reception marks for ${currentSheet.learners.length} learner(s).`;
+                status.textContent = `Saved subject marks and skill ratings for ${currentSheet.learners.length} learner(s).`;
             } catch (error) {
                 status.textContent = error.message || 'Unable to save Reception marks.';
             } finally {
-                button.disabled = !currentSheet || !currentSheet.subjects.length;
+                button.disabled = !currentSheet || !currentSheet.learners.length;
             }
         });
 

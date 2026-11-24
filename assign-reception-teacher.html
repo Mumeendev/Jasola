@@ -63,7 +63,7 @@
                 teachers.forEach(item => teacherSelect.add(new Option(
                     `${item.surname} ${item.othername} (@${item.username})`, item.username
                 )));
-                if (!classes.length) status.textContent = 'Add a class whose name includes “Reception” first.';
+                if (!classes.length) status.textContent = 'Add a Reception or KG One class first.';
                 if (!teachers.length) status.textContent = 'Add a teacher account before assigning the class.';
             } catch (error) {
                 status.textContent = error.message || 'Unable to load assignment options.';

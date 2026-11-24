@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learner Passport Photos - Jasola Model School</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 2rem; background: #edf2f7; color: #1a202c; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        main { max-width: 900px; margin: 0 auto; padding: 2rem; background: #fff; border-radius: 10px; box-shadow: 0 4px 16px #00000014; }
+        header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+        h1 { margin: .25rem 0; color: #1a365d; }
+        label { display: block; margin: 1.5rem 0 1rem; font-weight: 600; }
+        select { display: block; width: 100%; max-width: 450px; margin-top: .5rem; padding: .7rem; border: 1px solid #a0aec0; border-radius: 5px; font: inherit; }
+        button, .button { padding: .65rem .9rem; border: 0; border-radius: 5px; background: #2c5282; color: #fff; text-decoration: none; cursor: pointer; font: inherit; }
+        button:disabled { opacity: .6; cursor: wait; }
+        #status { min-height: 1.5rem; color: #4a5568; }
+        .table-wrap { overflow: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: .75rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        th { background: #2c5282; color: #fff; }
+        .passport { width: 64px; height: 80px; object-fit: cover; border: 1px solid #a0aec0; }
+        .empty { text-align: center; color: #718096; padding: 2rem; }
+        @media (max-width: 600px) { body { padding: 1rem; } main { padding: 1rem; } }
+    </style>
+    <link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <h1>Learner Passport Photos</h1>
+                <p>Add or update a learner photo. Saved photos appear on their report card.</p>
+            </div>
+            <a class="button" href="teacher-dashboard.html">Teacher Page</a>
+        </header>
+        <label for="class">Class and section
+            <select id="class"><option value="">Loading classes...</option></select>
+        </label>
+        <p id="status" role="status">Choose a class to load its learners.</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Learner</th><th>Passport photo</th><th>Action</th></tr>
+                </thead>
+                <tbody id="learners">
+                    <tr><td class="empty" colspan="3">Select a class.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+    <script src="auth.js"></script>
+    <script>
+        const role = sessionStorage.getItem('role');
+        if (role !== 'teacher') {
+            window.location.replace(role === 'admin' ? 'dashboard.html' : 'login.html');
+        }
+
+        const classSelect = document.getElementById('class');
+        const learnerList = document.getElementById('learners');
+        const status = document.getElementById('status');
+
+        async function loadLearners() {
+            learnerList.replaceChildren();
+            if (!classSelect.value) {
+                status.textContent = 'Choose a class to load its learners.';
+                return;
+            }
+            status.textContent = 'Loading learners...';
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(
+                    `${baseUrl}/api/learners?classId=${encodeURIComponent(classSelect.value)}`
+                );
+                const learners = await response.json();
+                if (!response.ok) throw new Error(learners.error || 'Unable to load learners.');
+                if (!learners.length) {
+                    learnerList.innerHTML = '<tr><td class="empty" colspan="3">No learners are registered in this class.</td></tr>';
+                    status.textContent = 'There are no learners in this class.';
+                    return;
+                }
+
+                learners.forEach(learner => {
+                    const row = document.createElement('tr');
+                    const name = document.createElement('td');
+                    name.textContent = `${learner.surname} ${learner.othername}` +
+                        (learner.admission_number ? ` (${learner.admission_number})` : '');
+                    const photoCell = document.createElement('td');
+                    const preview = document.createElement('img');
+                    preview.className = 'passport';
+                    preview.alt = `Passport photo for ${learner.surname} ${learner.othername}`;
+                    preview.hidden = !learner.passport_photo;
+                    if (learner.passport_photo) preview.src = learner.passport_photo;
+                    const noPhoto = document.createElement('span');
+                    noPhoto.textContent = 'No photo';
+                    noPhoto.hidden = Boolean(learner.passport_photo);
+                    photoCell.append(preview, noPhoto);
+
+                    const actionCell = document.createElement('td');
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/png,image/jpeg,image/webp';
+                    input.hidden = true;
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.textContent = learner.passport_photo ? 'Update photo' : 'Add photo';
+                    button.addEventListener('click', () => input.click());
+                    input.addEventListener('change', async () => {
+                        const file = input.files && input.files[0];
+                        if (!file) return;
+                        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
+                            file.size === 0 || file.size > 2 * 1024 * 1024) {
+                            status.textContent = 'Choose a PNG, JPEG, or WebP passport photo up to 2 MB.';
+                            input.value = '';
+                            return;
+                        }
+
+                        button.disabled = true;
+                        status.textContent = `Saving passport photo for ${learner.surname} ${learner.othername}...`;
+                        try {
+                            const passportPhoto = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.onerror = () => reject(new Error('Unable to read passport photo.'));
+                                reader.readAsDataURL(file);
+                            });
+                            const baseUrl = await window.resolvePortalApiBase();
+                            const saveResponse = await fetch(
+                                `${baseUrl}/api/learners/${encodeURIComponent(learner.id)}/passport`,
+                                {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ passportPhoto })
+                                }
+                            );
+                            const data = await saveResponse.json();
+                            if (!saveResponse.ok) throw new Error(data.error || 'Unable to save passport photo.');
+                            learner.passport_photo = passportPhoto;
+                            preview.src = passportPhoto;
+                            preview.hidden = false;
+                            noPhoto.hidden = true;
+                            button.textContent = 'Update photo';
+                            status.textContent = `Passport photo saved for ${learner.surname} ${learner.othername}.`;
+                        } catch (error) {
+                            status.textContent = error.message || 'Unable to save passport photo.';
+                        } finally {
+                            button.disabled = false;
+                            input.value = '';
+                        }
+                    });
+                    actionCell.append(button, input);
+                    row.append(name, photoCell, actionCell);
+                    learnerList.appendChild(row);
+                });
+                status.textContent = `${learners.length} learner(s) loaded. Photos are included on report cards.`;
+            } catch (error) {
+                learnerList.innerHTML = '<tr><td class="empty" colspan="3">Unable to load learners.</td></tr>';
+                status.textContent = error.message || 'Unable to load learners.';
+            }
+        }
+
+        async function loadClasses() {
+            try {
+                const baseUrl = await window.resolvePortalApiBase();
+                const response = await fetch(`${baseUrl}/api/classes`);
+                const classes = await response.json();
+                if (!response.ok) throw new Error(classes.error || 'Unable to load classes.');
+                classSelect.replaceChildren(new Option('Select class and section', ''));
+                classes.forEach(classRow => {
+                    classSelect.add(new Option(`${classRow.class_name} - ${classRow.section}`, classRow.id));
+                });
+                if (!classes.length) {
+                    classSelect.replaceChildren(new Option('No assigned classes', ''));
+                    status.textContent = 'You are not assigned to any active classes.';
+                }
+            } catch (error) {
+                classSelect.replaceChildren(new Option('Unable to load classes', ''));
+                status.textContent = error.message || 'Unable to load classes.';
+            }
+        }
+
+        classSelect.addEventListener('change', loadLearners);
+        loadClasses();
+    </script>
+</body>
+</html>

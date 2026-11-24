@@ -131,6 +131,10 @@ function subjectCategoryForClass(className) {
   return null;
 }
 
+function isReceptionClassName(className) {
+  return /reception|\bkg\s*[-.]?\s*(?:one|1)\b/i.test(className);
+}
+
 function isSubjectAllowedForClass(subject, classRow) {
   if (subject.stream && subject.stream !== classRow.stream) return false;
   const category = subjectCategoryForClass(classRow.class_name);
@@ -189,6 +193,13 @@ async function initializeDatabase() {
       );
       ALTER TABLE classes ADD COLUMN IF NOT EXISTS stream VARCHAR(20);
       ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+      INSERT INTO classes (class_name, section)
+      SELECT 'KG One', 'General'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM classes
+        WHERE class_name ~* '(^|[^[:alnum:]])kg[[:space:].-]*(one|1)([^[:alnum:]]|$)'
+      )
+      ON CONFLICT (class_name, section) DO NOTHING;
 
       CREATE TABLE IF NOT EXISTS subjects (
         id SERIAL PRIMARY KEY,
@@ -219,6 +230,16 @@ async function initializeDatabase() {
       ALTER TABLE learners ADD COLUMN IF NOT EXISTS date_of_birth DATE;
       ALTER TABLE learners ADD COLUMN IF NOT EXISTS class_id INTEGER REFERENCES classes(id);
       ALTER TABLE learners ADD COLUMN IF NOT EXISTS passport_photo TEXT;
+
+      CREATE TABLE IF NOT EXISTS learner_promotions (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        from_class_id INTEGER NOT NULL REFERENCES classes(id),
+        to_class_id INTEGER NOT NULL REFERENCES classes(id),
+        session_year VARCHAR(9) NOT NULL,
+        promoted_by VARCHAR(255) REFERENCES users(username),
+        promoted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
 
       CREATE TABLE IF NOT EXISTS results (
         id SERIAL PRIMARY KEY,
@@ -271,6 +292,21 @@ async function initializeDatabase() {
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, subject_id, term, session_year)
+      );
+      CREATE TABLE IF NOT EXISTS reception_learner_skills (
+        id SERIAL PRIMARY KEY,
+        learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        term VARCHAR(50) NOT NULL,
+        session_year VARCHAR(50) NOT NULL,
+        literacy_skill SMALLINT CHECK (literacy_skill BETWEEN 1 AND 5),
+        number_skill SMALLINT CHECK (number_skill BETWEEN 1 AND 5),
+        writing_skill SMALLINT CHECK (writing_skill BETWEEN 1 AND 5),
+        creative_skill SMALLINT CHECK (creative_skill BETWEEN 1 AND 5),
+        behaviour_skill SMALLINT CHECK (behaviour_skill BETWEEN 1 AND 5),
+        updated_by VARCHAR(255) REFERENCES users(username),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (learner_id, class_id, term, session_year)
       );
       CREATE TABLE IF NOT EXISTS learner_comments (
         id SERIAL PRIMARY KEY,
@@ -645,12 +681,12 @@ app.get('/api/reception/classes', requireRole('admin', 'teacher'), async (req, r
     const result = await pool.query(
       `SELECT id, class_name, section, class_teacher
        FROM classes
-       WHERE is_active = TRUE AND class_name ILIKE '%reception%'
+       WHERE is_active = TRUE
          AND ($1 = 'admin' OR class_teacher = $2)
        ORDER BY class_name, section`,
       [req.user.role, req.user.username]
     );
-    res.json(result.rows);
+    res.json(result.rows.filter(classRow => isReceptionClassName(classRow.class_name)));
   } catch (err) {
     console.error('Loading Reception classes failed:', err);
     res.status(500).json({ error: 'Unable to load Reception classes.' });
@@ -671,7 +707,8 @@ app.put('/api/reception/classes/:id/teacher', requireRole('admin'), async (req, 
        SET class_teacher = u.username
        FROM users u
        WHERE c.id = $1 AND c.is_active = TRUE
-         AND c.class_name ILIKE '%reception%'
+         AND (c.class_name ILIKE '%reception%' OR
+              c.class_name ~* '(^|[^[:alnum:]])kg[[:space:].-]*(one|1)([^[:alnum:]]|$)')
          AND u.username = $2 AND u.role = 'teacher'
        RETURNING c.id, c.class_name, c.section, c.class_teacher`,
       [classId, teacherUsername]
@@ -686,7 +723,7 @@ app.put('/api/reception/classes/:id/teacher', requireRole('admin'), async (req, 
   }
 });
 
-app.get('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res) => {
+async function loadReceptionSheet(req, res) {
   const classId = Number(req.query.classId);
   const { term, sessionYear } = req.query;
   if (!Number.isInteger(classId) || classId <= 0 ||
@@ -697,15 +734,17 @@ app.get('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
   try {
     const classResult = await pool.query(
       `SELECT id, class_name, section, class_teacher
-       FROM classes WHERE id = $1 AND is_active = TRUE AND class_name ILIKE '%reception%'`,
+       FROM classes WHERE id = $1 AND is_active = TRUE`,
       [classId]
     );
-    if (!classResult.rows.length) return res.status(404).json({ error: 'Reception class not found.' });
+    if (!classResult.rows.length || !isReceptionClassName(classResult.rows[0].class_name)) {
+      return res.status(404).json({ error: 'Reception class not found.' });
+    }
     if (req.user.role === 'teacher' &&
         classResult.rows[0].class_teacher !== req.user.username) {
       return res.status(403).json({ error: 'You are not assigned to this Reception class.' });
     }
-    const [subjectsResult, learnersResult, marksResult] = await Promise.all([
+    const [subjectsResult, learnersResult, marksResult, skillsResult] = await Promise.all([
       pool.query(
         `SELECT DISTINCT s.id, s.name, s.class_name, s.stream
          FROM allocations a
@@ -724,6 +763,13 @@ app.get('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
          FROM reception_results
          WHERE class_id = $1 AND term = $2 AND session_year = $3`,
         [classId, term.trim(), sessionYear.trim()]
+      ),
+      pool.query(
+        `SELECT learner_id, literacy_skill, number_skill, writing_skill,
+                creative_skill, behaviour_skill
+         FROM reception_learner_skills
+         WHERE class_id = $1 AND term = $2 AND session_year = $3`,
+        [classId, term.trim(), sessionYear.trim()]
       )
     ]);
     const subjects = subjectsResult.rows.filter(subject =>
@@ -735,13 +781,17 @@ app.get('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
       learners: learnersResult.rows,
       marks: marksResult.rows.filter(mark =>
         subjects.some(subject => subject.id === mark.subject_id)
-      )
+      ),
+      skills: skillsResult.rows
     });
   } catch (err) {
     console.error('Loading the Reception result sheet failed:', err);
     res.status(500).json({ error: 'Unable to load the Reception result sheet.' });
   }
-});
+}
+
+app.get('/api/reception/sheet', requireRole('admin', 'teacher'), loadReceptionSheet);
+app.get('/api/reception/print-sheet', requireRole('admin'), loadReceptionSheet);
 
 app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res) => {
   const classId = Number(req.body.classId);
@@ -755,10 +805,35 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
     return res.status(400).json({ error: 'Reception class, term, session, and mark rows are required.' });
   }
   const normalizedRows = [];
+  const skillRows = [];
   for (const row of rows) {
     const learnerId = Number(row.learnerId);
     if (!Number.isInteger(learnerId) || learnerId <= 0) {
       return res.status(400).json({ error: 'Each mark row must identify a valid learner.' });
+    }
+    if (row.skills !== undefined) {
+      if (!row.skills || typeof row.skills !== 'object' || Array.isArray(row.skills)) {
+        return res.status(400).json({ error: 'Each learner skill assessment must be valid.' });
+      }
+      const skills = {
+        literacySkill: row.skills.literacySkill,
+        numberSkill: row.skills.numberSkill,
+        writingSkill: row.skills.writingSkill,
+        creativeSkill: row.skills.creativeSkill,
+        behaviourSkill: row.skills.behaviourSkill
+      };
+      if (Object.values(skills).some(value => value !== null &&
+          !(Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5))) {
+        return res.status(400).json({ error: 'Reception skill scores must be blank or a whole number from 1 to 5.' });
+      }
+      skillRows.push({
+        learnerId,
+        literacySkill: skills.literacySkill === null ? null : Number(skills.literacySkill),
+        numberSkill: skills.numberSkill === null ? null : Number(skills.numberSkill),
+        writingSkill: skills.writingSkill === null ? null : Number(skills.writingSkill),
+        creativeSkill: skills.creativeSkill === null ? null : Number(skills.creativeSkill),
+        behaviourSkill: skills.behaviourSkill === null ? null : Number(skills.behaviourSkill)
+      });
     }
     for (const item of row.marks) {
       const subjectId = Number(item && item.subjectId);
@@ -774,16 +849,20 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
   if (new Set(rowKeys).size !== rowKeys.length) {
     return res.status(400).json({ error: 'A learner and subject appear more than once in the mark sheet.' });
   }
+  const learnerRowIds = rows.map(row => Number(row.learnerId));
+  if (new Set(learnerRowIds).size !== learnerRowIds.length) {
+    return res.status(400).json({ error: 'A learner appears more than once in the mark sheet.' });
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const classResult = await client.query(
       `SELECT id, class_name, class_teacher
-       FROM classes WHERE id = $1 AND is_active = TRUE AND class_name ILIKE '%reception%'`,
+       FROM classes WHERE id = $1 AND is_active = TRUE`,
       [classId]
     );
-    if (!classResult.rows.length) {
+    if (!classResult.rows.length || !isReceptionClassName(classResult.rows[0].class_name)) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Reception class not found.' });
     }
@@ -806,9 +885,9 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
     const subjectIds = new Set(subjectsResult.rows
       .filter(subject => isSubjectAllowedForClass(subject, classResult.rows[0]))
       .map(subject => subject.id));
-    if (normalizedRows.some(row =>
-      !learnerIds.has(row.learnerId) || !subjectIds.has(row.subjectId)
-    )) {
+    if (learnerRowIds.some(learnerId => !learnerIds.has(learnerId)) ||
+        normalizedRows.some(row => !subjectIds.has(row.subjectId)) ||
+        skillRows.some(row => !learnerIds.has(row.learnerId))) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Each mark must belong to a learner and subject in this Reception class.' });
     }
@@ -824,8 +903,24 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
           row.mark, req.user.username]
       );
     }
+    for (const row of skillRows) {
+      await client.query(
+        `INSERT INTO reception_learner_skills
+           (learner_id, class_id, term, session_year, literacy_skill, number_skill,
+            writing_skill, creative_skill, behaviour_skill, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (learner_id, class_id, term, session_year)
+         DO UPDATE SET literacy_skill = EXCLUDED.literacy_skill,
+           number_skill = EXCLUDED.number_skill, writing_skill = EXCLUDED.writing_skill,
+           creative_skill = EXCLUDED.creative_skill, behaviour_skill = EXCLUDED.behaviour_skill,
+           updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        [row.learnerId, classId, term.trim(), sessionYear.trim(),
+          row.literacySkill, row.numberSkill, row.writingSkill, row.creativeSkill,
+          row.behaviourSkill, req.user.username]
+      );
+    }
     await client.query('COMMIT');
-    res.json({ success: true, saved: normalizedRows.length });
+    res.json({ success: true, saved: normalizedRows.length, skillsSaved: skillRows.length });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Saving the Reception result sheet failed:', err);
@@ -1032,9 +1127,8 @@ app.get('/api/learners', requireRole('admin', 'teacher'), async (req, res) => {
         return res.status(403).json({ error: 'You are not assigned to this class.' });
       }
     }
-    const passportColumn = req.user.role === 'admin' ? ', passport_photo' : '';
     const result = await pool.query(
-      `SELECT id, surname, othername, admission_number, class_id, class_name${passportColumn}
+      `SELECT id, surname, othername, admission_number, class_id, class_name, passport_photo
        FROM learners WHERE class_id = $1 ORDER BY surname, othername`,
       [classId]
     );
@@ -1068,6 +1162,69 @@ app.post('/api/learners', requireRole('admin'), async (req, res) => {
   } catch (err) {
     console.error('Creating learner failed:', err);
     res.status(500).json({ error: 'Unable to register learner.' });
+  }
+});
+
+app.post('/api/learners/promote', requireRole('admin'), async (req, res) => {
+  const fromClassId = Number(req.body.fromClassId);
+  const toClassId = Number(req.body.toClassId);
+  const { sessionYear } = req.body;
+  const learnerIds = Array.isArray(req.body.learnerIds)
+    ? req.body.learnerIds.map(Number)
+    : [];
+  if (!Number.isInteger(fromClassId) || fromClassId <= 0 ||
+      !Number.isInteger(toClassId) || toClassId <= 0 || fromClassId === toClassId ||
+      typeof sessionYear !== 'string' || !/^\d{4}\/\d{4}$/.test(sessionYear.trim()) ||
+      !learnerIds.length || learnerIds.some((id) => !Number.isInteger(id) || id <= 0) ||
+      new Set(learnerIds).size !== learnerIds.length) {
+    return res.status(400).json({
+      error: 'Select different source and destination classes, a valid session, and one or more unique learners.'
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const classes = await client.query(
+      `SELECT id, class_name FROM classes
+       WHERE id = ANY($1::int[]) AND is_active = TRUE FOR UPDATE`,
+      [[fromClassId, toClassId]]
+    );
+    if (classes.rows.length !== 2) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Both selected classes must be active.' });
+    }
+
+    const toClass = classes.rows.find((classRow) => classRow.id === toClassId);
+    const learners = await client.query(
+      'SELECT id FROM learners WHERE id = ANY($1::int[]) AND class_id = $2 FOR UPDATE',
+      [learnerIds, fromClassId]
+    );
+    if (learners.rows.length !== learnerIds.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Every selected learner must belong to the source class.' });
+    }
+
+    for (const learnerId of learnerIds) {
+      await client.query(
+        `INSERT INTO learner_promotions
+           (learner_id, from_class_id, to_class_id, session_year, promoted_by)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [learnerId, fromClassId, toClassId, sessionYear.trim(), req.user.username]
+      );
+    }
+    await client.query(
+      'UPDATE learners SET class_id = $1, class_name = $2 WHERE id = ANY($3::int[])',
+      [toClassId, toClass.class_name, learnerIds]
+    );
+    await client.query('COMMIT');
+    res.json({ success: true, promoted: learnerIds.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Promoting learners failed:', err);
+    res.status(500).json({ error: 'Unable to promote learners.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1247,7 +1404,7 @@ app.put('/api/result-sheet', requireRole('admin', 'teacher'), async (req, res) =
   }
 });
 
-app.put('/api/learners/:id/passport', requireRole('admin'), async (req, res) => {
+app.put('/api/learners/:id/passport', requireRole('admin', 'teacher'), async (req, res) => {
   const learnerId = Number(req.params.id);
   const { passportPhoto } = req.body;
   const match = typeof passportPhoto === 'string'
@@ -1260,11 +1417,27 @@ app.put('/api/learners/:id/passport', requireRole('admin'), async (req, res) => 
     return res.status(400).json({ error: 'Choose a valid PNG, JPEG, or WebP passport photo up to 2 MB.' });
   }
   try {
-    const result = await pool.query(
-      'UPDATE learners SET passport_photo = $1 WHERE id = $2 RETURNING id',
-      [passportPhoto, learnerId]
-    );
-    if (!result.rows.length) return res.status(404).json({ error: 'Learner not found.' });
+    const result = req.user.role === 'admin'
+      ? await pool.query(
+        'UPDATE learners SET passport_photo = $1 WHERE id = $2 RETURNING id',
+        [passportPhoto, learnerId]
+      )
+      : await pool.query(
+        `UPDATE learners l SET passport_photo = $1
+         WHERE l.id = $2 AND EXISTS (
+           SELECT 1 FROM allocations a
+           WHERE a.class_id = l.class_id AND a.teacher_username = $3
+         )
+         RETURNING l.id`,
+        [passportPhoto, learnerId, req.user.username]
+      );
+    if (!result.rows.length) {
+      return res.status(req.user.role === 'admin' ? 404 : 403).json({
+        error: req.user.role === 'admin'
+          ? 'Learner not found.'
+          : "You are not assigned to this learner's class."
+      });
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('Saving learner passport photo failed:', err);

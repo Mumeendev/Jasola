@@ -22,8 +22,16 @@ button {
     max-width: 100%;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+    width: auto;
+    min-width: 0;
+}
+
 @media screen and (max-width: 760px) {
     body {
+        display: block !important;
+        width: 100%;
         padding: 1rem !important;
     }
 
@@ -59,12 +67,21 @@ button {
 
     main,
     .form-container,
+    .login-container,
     .view-container,
     .dashboard-container {
         width: 100%;
         max-width: 100%;
+        min-width: 0;
         margin: .5rem auto;
         padding: 1rem !important;
+    }
+
+    .page-container {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        margin: .5rem auto !important;
     }
 
     header,
@@ -72,9 +89,20 @@ button {
     .toolbar,
     .bottom-buttons,
     .actions,
+    .form-actions,
     .filters {
         flex-wrap: wrap;
         gap: .75rem;
+    }
+
+    header > *,
+    form,
+    section,
+    article,
+    .cards > *,
+    .options > * {
+        min-width: 0;
+        max-width: 100%;
     }
 
     form > div[style*="grid-template-columns"] {
@@ -121,6 +149,21 @@ button {
         min-width: 0;
     }
 
+    .attendance-row {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .learner-picker {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .learner-picker select {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0 !important;
+    }
+
     .table-wrap,
     #users-table,
     #subjects-table-container {
@@ -139,12 +182,37 @@ button {
 
     .report-card {
         min-height: 0;
+        max-width: 100%;
         padding: 1rem;
+        overflow-x: auto;
         overflow-wrap: anywhere;
+    }
+
+    .report-card > .scores-table {
+        min-width: 720px;
+    }
+
+    .detail-row {
+        flex-wrap: wrap;
+        gap: .25rem .75rem;
+    }
+
+    .detail-row .value {
+        overflow-wrap: anywhere;
+    }
+
+    .detail-row > * {
+        min-width: 0;
     }
 
     .signatures {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .hero {
+        min-height: calc(100vh - 6rem);
+        margin-top: 0;
+        padding: 2rem 1rem;
     }
 }
 
@@ -155,6 +223,7 @@ button {
 
     main,
     .form-container,
+    .login-container,
     .view-container,
     .dashboard-container {
         padding: .75rem !important;
@@ -173,12 +242,14 @@ button {
 
     .bottom-buttons,
     .actions,
+    .form-actions,
     .toolbar {
         flex-direction: column;
     }
 
     .bottom-buttons > *,
     .actions > *,
+    .form-actions > *,
     .toolbar > * {
         width: 100%;
         flex: 1 1 auto;
@@ -193,8 +264,31 @@ button {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 
+    .report-card .student-details {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .report-card .student-passport,
+    .report-card .student-attendance {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    .login-container,
+    .password-form,
+    .details-card {
+        padding: 1rem !important;
+    }
+
     table th,
     table td {
         padding: .5rem;
+    }
+}
+
+@media screen and (max-width: 360px) {
+    .summary,
+    .signatures {
+        grid-template-columns: minmax(0, 1fr) !important;
     }
 }

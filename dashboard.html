@@ -166,6 +166,8 @@
             <button class="action-btn" onclick="window.location.href='view-users.html'">Manage Users</button>
             <button class="action-btn" onclick="window.location.href='add-learner.html'">Add Learner</button>
             <button class="action-btn" onclick="window.location.href='manage-learners.html'">Manage / Remove Learners</button>
+            <button id="promote-learners-button" class="action-btn" hidden
+                    onclick="window.location.href='promote-learners.html'">Promote Learners</button>
             <button class="action-btn" onclick="window.location.href='add-subject.html'">Add Subject</button>
             <button class="action-btn" onclick="window.location.href='view-subjects.html'">Manage Subjects</button>
             <button class="action-btn" onclick="window.location.href='allocate-subject.html'">Allocate / Change Teacher Subjects</button>
@@ -187,9 +189,11 @@
         if (!sessionStorage.getItem('token')) {
             window.location.href = 'login.html';
         }
-        if (sessionStorage.getItem('role') === 'teacher') {
+        const role = sessionStorage.getItem('role');
+        document.getElementById('promote-learners-button').hidden = role !== 'admin';
+        if (role === 'teacher') {
             window.location.replace('teacher-dashboard.html');
-        } else if (sessionStorage.getItem('role') !== 'admin') {
+        } else if (role !== 'admin') {
             sessionStorage.clear();
             window.location.replace('login.html');
         }
