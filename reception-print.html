@@ -31,6 +31,9 @@
         .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-top: 1rem; }
         .summary div { padding: .65rem; border: 1px solid #a0aec0; text-align: center; }
         .summary strong { display: block; margin-bottom: .2rem; }
+        .report-comment { margin:.5rem 0; padding:.65rem; border:1px solid #718096; }
+        .report-comment h2 { margin:0 0 .4rem; }
+        .report-comment p { margin:0; white-space:pre-wrap; }
         @page { size: A4 portrait; margin: 10mm; }
         @media print {
             body { padding: 0; background: #fff; }
@@ -38,6 +41,14 @@
             .toolbar, .filters, #status { display: none !important; }
             .report-card { margin: 0; padding: 3mm; border: 0; break-after: page; page-break-after: always; }
             .report-card:last-child { break-after: auto; page-break-after: auto; }
+            .school-heading { margin-bottom:.4rem; padding-bottom:.3rem; }
+            .school-heading img { width:48px; height:48px; }
+            .learner-details { gap:.3rem .75rem; margin:.4rem 0; font-size:8pt; }
+            .report-card h2 { margin:.45rem 0 .2rem; font-size:10pt; }
+            table { margin:.25rem 0 .45rem; font-size:7pt; }
+            th, td { padding:2px 4px; }
+            .report-comment { margin:.25rem 0; padding:.35rem; }
+            .report-comment h2 { margin:0 0 .2rem; }
             th { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         }
         @media (max-width: 600px) {
@@ -88,12 +99,68 @@
         const results = document.getElementById('results');
         const status = document.getElementById('status');
         const printButton = document.getElementById('print-button');
-        const skillFields = [
-            ['literacy_skill', 'Literacy skill'],
-            ['number_skill', 'Number skill'],
-            ['writing_skill', 'Writing skills'],
-            ['creative_skill', 'Creative skill'],
-            ['behaviour_skill', 'Behaviour']
+        const skillGroups = [
+            {
+                title: 'Literacy Skills',
+                items: [
+                    ['recognitionOfAlphabets', 'Recognition of Alphabets'],
+                    ['readingAbility', 'Reading Ability'],
+                    ['reciteRhymePoem', 'Can recite rhyme/poem'],
+                    ['recognitionOfObjectNames', 'Recognition of object names']
+                ]
+            },
+            {
+                title: 'Number Skills',
+                items: [
+                    ['recognitionOfNumbers', 'Recognition of numbers'],
+                    ['counting', 'Counting'],
+                    ['numberSequenceQuantitative', 'Number Sequence (Quantitative)'],
+                    ['simpleNumberManipulation', 'Simple Number Manipulation']
+                ]
+            },
+            {
+                title: 'Writing Skills',
+                items: [
+                    ['ableToWrite', 'Able to write'],
+                    ['printingNumbers', 'Printing Numbers'],
+                    ['printingLetters', 'Printing Letters'],
+                    ['writingNeatness', 'Neatness']
+                ]
+            },
+            {
+                title: 'Creative Skills',
+                items: [
+                    ['printingAndColoring', 'Printing & Coloring'],
+                    ['ableToDraw', 'Able to draw'],
+                    ['modeling', 'Modeling'],
+                    ['computerDesign', 'Computer Design']
+                ]
+            },
+            {
+                title: 'Others',
+                items: [
+                    ['assignment', 'Assignment'],
+                    ['healthHabit', 'Health Habit'],
+                    ['socialHabit', 'Social Habit'],
+                    ['nurseryScience', 'Nursery Science'],
+                    ['computerAppreciation', 'Computer Appreciation']
+                ]
+            },
+            {
+                title: 'Behaviour',
+                items: [
+                    ['punctuality', 'Punctuality'],
+                    ['comportment', 'Comportment'],
+                    ['neatness', 'Neatness'],
+                    ['reliability', 'Reliability'],
+                    ['honesty', 'Honesty'],
+                    ['selfControl', 'Self control'],
+                    ['initiative', 'Initiative'],
+                    ['spiritOfCoordination', 'Spirit of Co-ordination'],
+                    ['responsibility', 'Responsibility'],
+                    ['perseverance', 'Perseverance']
+                ]
+            }
         ];
 
         async function loadClasses() {
@@ -134,6 +201,14 @@
             const skillsByLearner = new Map(data.skills.map(skills => [
                 skills.learner_id,
                 skills
+            ]));
+            const attendanceByLearner = new Map(data.attendance.map(item => [
+                item.learner_id,
+                item
+            ]));
+            const commentsByLearner = new Map(data.comments.map(item => [
+                item.learner_id,
+                item
             ]));
             const learnerTotals = data.learners.map(learner => {
                 const marks = data.subjects
@@ -190,26 +265,56 @@
                 });
                 card.appendChild(details);
 
+                const attendanceHeading = document.createElement('h2');
+                attendanceHeading.textContent = 'Attendance and Resumption';
+                card.appendChild(attendanceHeading);
+                const attendanceTable = document.createElement('table');
+                const attendanceHead = document.createElement('thead');
+                const attendanceHeader = document.createElement('tr');
+                ['Days school open', 'Days present', 'Days absent', 'Resumption date'].forEach(label =>
+                    createCell(attendanceHeader, label, 'th')
+                );
+                attendanceHead.appendChild(attendanceHeader);
+                attendanceTable.appendChild(attendanceHead);
+                const attendanceBody = document.createElement('tbody');
+                const attendance = attendanceByLearner.get(learner.id);
+                const attendanceRow = document.createElement('tr');
+                createCell(attendanceRow, attendance && attendance.days_school_open);
+                createCell(attendanceRow, attendance && attendance.days_present);
+                createCell(attendanceRow, attendance &&
+                    Number(attendance.days_school_open) - Number(attendance.days_present));
+                createCell(attendanceRow, attendance && attendance.resumption_date
+                    ? String(attendance.resumption_date).slice(0, 10)
+                    : null);
+                attendanceBody.appendChild(attendanceRow);
+                attendanceTable.appendChild(attendanceBody);
+                card.appendChild(attendanceTable);
+
                 const skillsHeading = document.createElement('h2');
                 skillsHeading.textContent = 'Reception Skills';
                 card.appendChild(skillsHeading);
-                const skillsTable = document.createElement('table');
-                const skillsHead = document.createElement('thead');
-                const skillsHeader = document.createElement('tr');
-                createCell(skillsHeader, 'Skill', 'th');
-                createCell(skillsHeader, 'Rating (out of 5)', 'th');
-                skillsHead.appendChild(skillsHeader);
-                skillsTable.appendChild(skillsHead);
-                const skillsBody = document.createElement('tbody');
                 const learnerSkills = skillsByLearner.get(learner.id) || {};
-                skillFields.forEach(([field, label]) => {
-                    const row = document.createElement('tr');
-                    createCell(row, label);
-                    createCell(row, learnerSkills[field]);
-                    skillsBody.appendChild(row);
+                skillGroups.forEach(group => {
+                    const groupHeading = document.createElement('h2');
+                    groupHeading.textContent = group.title;
+                    card.appendChild(groupHeading);
+                    const skillsTable = document.createElement('table');
+                    const skillsHead = document.createElement('thead');
+                    const skillsHeader = document.createElement('tr');
+                    createCell(skillsHeader, 'Skill', 'th');
+                    createCell(skillsHeader, 'Rating (out of 5)', 'th');
+                    skillsHead.appendChild(skillsHeader);
+                    skillsTable.appendChild(skillsHead);
+                    const skillsBody = document.createElement('tbody');
+                    group.items.forEach(([field, label]) => {
+                        const row = document.createElement('tr');
+                        createCell(row, label);
+                        createCell(row, learnerSkills.ratings && learnerSkills.ratings[field]);
+                        skillsBody.appendChild(row);
+                    });
+                    skillsTable.appendChild(skillsBody);
+                    card.appendChild(skillsTable);
                 });
-                skillsTable.appendChild(skillsBody);
-                card.appendChild(skillsTable);
 
                 const subjectsHeading = document.createElement('h2');
                 subjectsHeading.textContent = 'Subject Marks';
@@ -250,6 +355,21 @@
                 }
                 subjectTable.appendChild(subjectBody);
                 card.appendChild(subjectTable);
+
+                const comments = commentsByLearner.get(learner.id) || {};
+                [
+                    ['Principal/Admin Comment', comments.principal_comment],
+                    ["Teacher's Comment", comments.teacher_comment]
+                ].forEach(([label, value]) => {
+                    const comment = document.createElement('section');
+                    comment.className = 'report-comment';
+                    const commentHeading = document.createElement('h2');
+                    commentHeading.textContent = label;
+                    const text = document.createElement('p');
+                    text.textContent = value || '—';
+                    comment.append(commentHeading, text);
+                    card.appendChild(comment);
+                });
 
                 const summary = document.createElement('section');
                 summary.className = 'summary';

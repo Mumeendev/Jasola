@@ -18,13 +18,21 @@
         button:disabled { opacity:.6; cursor:wait; }
         .button.secondary { background:#4a5568; }
         #status { min-height:1.5rem; color:#4a5568; }
-        .table-wrap { overflow:auto; border:1px solid #cbd5e0; }
-        table { width:100%; min-width:1400px; border-collapse:collapse; }
+        .table-wrap { overflow:auto; border:1px solid #cbd5e0; margin:.75rem 0 1.25rem; }
+        table { width:100%; min-width:900px; border-collapse:collapse; }
         th,td { padding:.55rem; border:1px solid #cbd5e0; text-align:center; }
         th { background:#1f4e78; color:#fff; }
         th:first-child,td:first-child,th:nth-child(2),td:nth-child(2) { text-align:left; }
         .mark-scale { display:block; margin-top:.3rem; font-size:.75rem; font-weight:400; }
         td select { min-width:65px; width:100%; }
+        h2 { margin:1.25rem 0 .4rem; color:#1a365d; }
+        .skill-table { min-width:900px; }
+        .learner-comments { display:grid; gap:.75rem; }
+        .comment-row { display:grid; grid-template-columns:minmax(180px,1fr) 2fr; gap:.75rem; align-items:start; }
+        .comment-row textarea { min-height:4rem; padding:.6rem; font:inherit; border:1px solid #a0aec0; border-radius:5px; }
+        .comment-row textarea:disabled { background:#edf2f7; }
+        .attendance-input { width:90px; min-width:70px; }
+        .date-input { min-width:150px; }
         .summary { display:grid; grid-template-columns:repeat(2,minmax(150px,1fr)); gap:.75rem; margin-top:1rem; }
         .summary div { padding:.7rem; border:1px solid #a0aec0; border-radius:5px; }
         .summary strong { display:block; margin-bottom:.2rem; }
@@ -69,12 +77,33 @@
             <button type="submit" id="load-button">Load Mark Sheet</button>
         </form>
         <p id="status" role="status">Choose a class, term, and session.</p>
-        <div class="table-wrap">
-            <table id="mark-table" hidden>
-                <thead id="mark-head"></thead>
-                <tbody id="mark-body"></tbody>
-            </table>
-        </div>
+        <section id="attendance-section" hidden>
+            <h2>Attendance and Resumption</h2>
+            <p>Days absent is calculated automatically as days school was open minus days present.</p>
+            <div class="table-wrap">
+                <table id="attendance-table">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+        <section id="subject-section" hidden>
+            <h2>Subject Marks</h2>
+            <div class="table-wrap">
+                <table id="mark-table">
+                    <thead id="mark-head"></thead>
+                    <tbody id="mark-body"></tbody>
+                </table>
+            </div>
+        </section>
+        <section id="skills-section" hidden>
+            <h2>Skills Assessment</h2>
+            <div id="skill-tables"></div>
+        </section>
+        <section id="comments-section" hidden>
+            <h2>Report-card Comments</h2>
+            <div id="learner-comments" class="learner-comments"></div>
+        </section>
         <section id="summary" class="summary" hidden></section>
         <div class="actions">
             <button type="button" id="save-button" disabled>Save Reception Marks</button>
@@ -89,12 +118,78 @@
         }
 
         const classSelect = document.getElementById('class');
-        const markTable = document.getElementById('mark-table');
         const markHead = document.getElementById('mark-head');
         const markBody = document.getElementById('mark-body');
         const summary = document.getElementById('summary');
         const status = document.getElementById('status');
+        const attendanceTable = document.getElementById('attendance-table');
+        const skillTables = document.getElementById('skill-tables');
+        const commentsList = document.getElementById('learner-comments');
         let currentSheet = null;
+
+        const skillGroups = [
+            {
+                title: 'Literacy Skills',
+                items: [
+                    ['recognitionOfAlphabets', 'Recognition of Alphabets'],
+                    ['readingAbility', 'Reading Ability'],
+                    ['reciteRhymePoem', 'Can recite rhyme/poem'],
+                    ['recognitionOfObjectNames', 'Recognition of object names']
+                ]
+            },
+            {
+                title: 'Number Skills',
+                items: [
+                    ['recognitionOfNumbers', 'Recognition of numbers'],
+                    ['counting', 'Counting'],
+                    ['numberSequenceQuantitative', 'Number Sequence (Quantitative)'],
+                    ['simpleNumberManipulation', 'Simple Number Manipulation']
+                ]
+            },
+            {
+                title: 'Writing Skills',
+                items: [
+                    ['ableToWrite', 'Able to write'],
+                    ['printingNumbers', 'Printing Numbers'],
+                    ['printingLetters', 'Printing Letters'],
+                    ['writingNeatness', 'Neatness']
+                ]
+            },
+            {
+                title: 'Creative Skills',
+                items: [
+                    ['printingAndColoring', 'Printing & Coloring'],
+                    ['ableToDraw', 'Able to draw'],
+                    ['modeling', 'Modeling'],
+                    ['computerDesign', 'Computer Design']
+                ]
+            },
+            {
+                title: 'Others',
+                items: [
+                    ['assignment', 'Assignment'],
+                    ['healthHabit', 'Health Habit'],
+                    ['socialHabit', 'Social Habit'],
+                    ['nurseryScience', 'Nursery Science'],
+                    ['computerAppreciation', 'Computer Appreciation']
+                ]
+            },
+            {
+                title: 'Behaviour',
+                items: [
+                    ['punctuality', 'Punctuality'],
+                    ['comportment', 'Comportment'],
+                    ['neatness', 'Neatness'],
+                    ['reliability', 'Reliability'],
+                    ['honesty', 'Honesty'],
+                    ['selfControl', 'Self control'],
+                    ['initiative', 'Initiative'],
+                    ['spiritOfCoordination', 'Spirit of Co-ordination'],
+                    ['responsibility', 'Responsibility'],
+                    ['perseverance', 'Perseverance']
+                ]
+            }
+        ];
 
         async function loadClasses() {
             try {
@@ -118,16 +213,29 @@
             }
         }
 
-        function learnerMark(learnerId, subjectId) {
-            const saved = currentSheet.marks.find(mark =>
-                mark.learner_id === learnerId && mark.subject_id === subjectId
-            );
-            return saved && saved.mark !== null ? String(saved.mark) : '';
+        function learnerName(learner) {
+            return `${learner.surname} ${learner.othername}` +
+                (learner.admission_number ? ` (${learner.admission_number})` : '');
         }
 
-        function learnerSkill(learnerId, field) {
-            const saved = currentSheet.skills.find(item => item.learner_id === learnerId);
-            return saved && saved[field] !== null ? String(saved[field]) : '';
+        function addCell(row, value, tag = 'td') {
+            const cell = document.createElement(tag);
+            cell.textContent = value;
+            row.appendChild(cell);
+            return cell;
+        }
+
+        function addScoreSelect(cell, label, value, className) {
+            const select = document.createElement('select');
+            select.className = className;
+            select.setAttribute('aria-label', label);
+            select.add(new Option('—', ''));
+            [5, 4, 3, 2, 1].forEach(mark =>
+                select.add(new Option(String(mark), String(mark)))
+            );
+            select.value = value === null || value === undefined ? '' : String(value);
+            cell.appendChild(select);
+            return select;
         }
 
         function updateSummary() {
@@ -138,11 +246,9 @@
                 const obtained = inputs.reduce((sum, input) =>
                     sum + (input.value ? Number(input.value) : 0), 0);
                 const obtainable = currentSheet.subjects.length * 5;
-                row.querySelector('.mark-obtained').textContent = obtained;
+                row.querySelector('.mark-obtained').textContent = String(obtained);
                 row.querySelector('.mark-obtainable').textContent = obtainable || '—';
-                const percentage = obtainable
-                    ? obtained / obtainable * 100
-                    : null;
+                const percentage = obtainable ? obtained / obtainable * 100 : null;
                 row.querySelector('.total-percent').textContent = percentage === null
                     ? '—'
                     : `${percentage.toFixed(2)}%`;
@@ -168,86 +274,173 @@
             summary.hidden = false;
         }
 
+        function renderAttendance(data) {
+            const head = attendanceTable.querySelector('thead');
+            const body = attendanceTable.querySelector('tbody');
+            const saved = new Map(data.attendance.map(item => [item.learner_id, item]));
+            head.replaceChildren();
+            body.replaceChildren();
+            const header = document.createElement('tr');
+            ['Learner', 'Days school open', 'Days present', 'Days absent', 'Resumption date']
+                .forEach(label => addCell(header, label, 'th'));
+            head.appendChild(header);
+            data.learners.forEach(learner => {
+                const item = saved.get(learner.id) || {};
+                const row = document.createElement('tr');
+                row.dataset.learnerId = String(learner.id);
+                addCell(row, learnerName(learner));
+                [['days-open', item.days_school_open], ['days-present', item.days_present]].forEach(
+                    ([className, value]) => {
+                        const cell = document.createElement('td');
+                        const input = document.createElement('input');
+                        input.type = 'number';
+                        input.min = '0';
+                        input.step = '1';
+                        input.className = `attendance-input ${className}`;
+                        input.value = value === null || value === undefined ? '' : String(value);
+                        input.setAttribute('aria-label', `${className.replace('-', ' ')} for ${learnerName(learner)}`);
+                        cell.appendChild(input);
+                        row.appendChild(cell);
+                    }
+                );
+                const absentCell = document.createElement('td');
+                absentCell.className = 'days-absent';
+                row.appendChild(absentCell);
+                const dateCell = document.createElement('td');
+                const dateInput = document.createElement('input');
+                dateInput.type = 'date';
+                dateInput.className = 'date-input resumption-date';
+                dateInput.value = item.resumption_date
+                    ? String(item.resumption_date).slice(0, 10)
+                    : '';
+                dateInput.setAttribute('aria-label', `Resumption date for ${learnerName(learner)}`);
+                dateCell.appendChild(dateInput);
+                row.appendChild(dateCell);
+                const calculateAbsent = () => {
+                    const opened = row.querySelector('.days-open').value;
+                    const present = row.querySelector('.days-present').value;
+                    if (opened === '' || present === '') {
+                        absentCell.textContent = '—';
+                    } else if (Number(present) > Number(opened)) {
+                        absentCell.textContent = 'Check days present';
+                    } else {
+                        absentCell.textContent = String(Number(opened) - Number(present));
+                    }
+                };
+                row.querySelectorAll('.attendance-input').forEach(input =>
+                    input.addEventListener('input', calculateAbsent)
+                );
+                calculateAbsent();
+                body.appendChild(row);
+            });
+        }
+
+        function renderSkills(data) {
+            const savedByLearner = new Map(data.skills.map(item => [item.learner_id, item]));
+            skillTables.replaceChildren();
+            skillGroups.forEach(group => {
+                const heading = document.createElement('h3');
+                heading.textContent = group.title;
+                skillTables.appendChild(heading);
+                const wrap = document.createElement('div');
+                wrap.className = 'table-wrap';
+                const table = document.createElement('table');
+                table.className = 'skill-table';
+                const head = document.createElement('thead');
+                const header = document.createElement('tr');
+                addCell(header, 'Learner', 'th');
+                group.items.forEach(([, label]) => {
+                    const cell = addCell(header, label, 'th');
+                    const scale = document.createElement('span');
+                    scale.className = 'mark-scale';
+                    scale.textContent = '5 · 4 · 3 · 2 · 1';
+                    cell.appendChild(scale);
+                });
+                head.appendChild(header);
+                table.appendChild(head);
+                const body = document.createElement('tbody');
+                data.learners.forEach(learner => {
+                    const row = document.createElement('tr');
+                    row.dataset.learnerId = String(learner.id);
+                    addCell(row, learnerName(learner));
+                    const ratings = savedByLearner.get(learner.id)?.ratings || {};
+                    group.items.forEach(([field, label]) => {
+                        const cell = document.createElement('td');
+                        addScoreSelect(cell, `${label} for ${learnerName(learner)}`,
+                            ratings[field], 'skill-mark');
+                        const select = cell.querySelector('select');
+                        select.dataset.skill = field;
+                        select.dataset.learnerId = String(learner.id);
+                        row.appendChild(cell);
+                    });
+                    body.appendChild(row);
+                });
+                table.appendChild(body);
+                wrap.appendChild(table);
+                skillTables.appendChild(wrap);
+            });
+        }
+
+        function renderComments(data) {
+            const savedByLearner = new Map(data.comments.map(item => [item.learner_id, item]));
+            commentsList.replaceChildren();
+            const commentType = role === 'admin' ? 'principalComment' : 'teacherComment';
+            const commentField = role === 'admin' ? 'principal_comment' : 'teacher_comment';
+            document.querySelector('#comments-section h2').textContent = role === 'admin'
+                ? 'Principal/Admin Comments'
+                : 'Teacher Comments';
+            data.learners.forEach(learner => {
+                const saved = savedByLearner.get(learner.id) || {};
+                const row = document.createElement('label');
+                row.className = 'comment-row';
+                const name = document.createElement('span');
+                name.textContent = learnerName(learner);
+                const textarea = document.createElement('textarea');
+                textarea.maxLength = 2000;
+                textarea.dataset.learnerId = String(learner.id);
+                textarea.dataset.commentType = commentType;
+                textarea.value = saved[commentField] || '';
+                textarea.setAttribute('aria-label',
+                    `${role === 'admin' ? 'Principal/admin' : 'Teacher'} comment for ${learnerName(learner)}`);
+                textarea.placeholder = 'Write a report-card comment for this learner';
+                row.append(name, textarea);
+                commentsList.appendChild(row);
+            });
+        }
+
         function renderSheet(data) {
             currentSheet = data;
             markHead.replaceChildren();
             markBody.replaceChildren();
+            const savedMarks = new Map(data.marks.map(mark => [
+                `${mark.learner_id}:${mark.subject_id}`, mark.mark
+            ]));
             const header = document.createElement('tr');
-            const numberHeader = document.createElement('th');
-            numberHeader.rowSpan = 2;
-            numberHeader.textContent = 'No.';
-            const learnerHeader = document.createElement('th');
-            learnerHeader.rowSpan = 2;
-            learnerHeader.textContent = 'Learner';
-            header.append(numberHeader, learnerHeader);
+            ['No.', 'Learner'].forEach(label => addCell(header, label, 'th'));
             data.subjects.forEach(subject => {
-                const cell = document.createElement('th');
-                cell.textContent = subject.name;
+                const cell = addCell(header, subject.name, 'th');
                 const scale = document.createElement('span');
                 scale.className = 'mark-scale';
                 scale.textContent = '5 · 4 · 3 · 2 · 1';
                 cell.appendChild(scale);
-                header.appendChild(cell);
             });
-            const skills = [
-                ['literacy_skill', 'Literacy skill'],
-                ['number_skill', 'Number skill'],
-                ['writing_skill', 'Writing skills'],
-                ['creative_skill', 'Creative skill'],
-                ['behaviour_skill', 'Behaviour']
-            ];
-            skills.forEach(([, label]) => {
-                const cell = document.createElement('th');
-                cell.textContent = label;
-                const scale = document.createElement('span');
-                scale.className = 'mark-scale';
-                scale.textContent = '5 · 4 · 3 · 2 · 1';
-                cell.appendChild(scale);
-                header.appendChild(cell);
-            });
-            ['Mark obtained', 'Mark obtainable', 'Total %'].forEach(label => {
-                const cell = document.createElement('th');
-                cell.rowSpan = 2;
-                cell.textContent = label;
-                header.appendChild(cell);
-            });
+            ['Mark obtained', 'Mark obtainable', 'Total %'].forEach(label =>
+                addCell(header, label, 'th')
+            );
             markHead.appendChild(header);
 
             data.learners.forEach((learner, index) => {
                 const row = document.createElement('tr');
-                const learnerName = `${learner.surname} ${learner.othername}` +
-                    (learner.admission_number ? ` (${learner.admission_number})` : '');
-                const numberCell = document.createElement('td');
-                numberCell.textContent = String(index + 1);
-                const learnerCell = document.createElement('td');
-                learnerCell.textContent = learnerName;
-                row.append(numberCell, learnerCell);
+                row.dataset.learnerId = String(learner.id);
+                addCell(row, String(index + 1));
+                addCell(row, learnerName(learner));
                 data.subjects.forEach(subject => {
                     const cell = document.createElement('td');
-                    const select = document.createElement('select');
-                    select.className = 'subject-mark';
-                    select.setAttribute('aria-label', `${subject.name} mark for ${learnerName}`);
-                    select.add(new Option('—', ''));
-                    [5, 4, 3, 2, 1].forEach(mark =>
-                        select.add(new Option(String(mark), String(mark)))
-                    );
-                    select.value = learnerMark(learner.id, subject.id);
+                    const mark = savedMarks.get(`${learner.id}:${subject.id}`);
+                    const select = addScoreSelect(cell, `${subject.name} mark for ${learnerName(learner)}`,
+                        mark, 'subject-mark');
+                    select.dataset.subjectId = String(subject.id);
                     select.addEventListener('change', updateSummary);
-                    cell.appendChild(select);
-                    row.appendChild(cell);
-                });
-                skills.forEach(([field]) => {
-                    const cell = document.createElement('td');
-                    const select = document.createElement('select');
-                    select.className = 'skill-mark';
-                    select.dataset.skill = field;
-                    select.setAttribute('aria-label', `${field.replace(/_/g, ' ')} for ${learnerName}`);
-                    select.add(new Option('—', ''));
-                    [5, 4, 3, 2, 1].forEach(mark =>
-                        select.add(new Option(String(mark), String(mark)))
-                    );
-                    select.value = learnerSkill(learner.id, field);
-                    cell.appendChild(select);
                     row.appendChild(cell);
                 });
                 ['mark-obtained', 'mark-obtainable', 'total-percent'].forEach(className => {
@@ -257,7 +450,15 @@
                 });
                 markBody.appendChild(row);
             });
-            markTable.hidden = false;
+
+            renderAttendance(data);
+            renderSkills(data);
+            renderComments(data);
+            document.getElementById('attendance-section').hidden = !data.learners.length;
+            document.getElementById('subject-section').hidden = !data.learners.length;
+            document.getElementById('skills-section').hidden = !data.learners.length;
+            document.getElementById('comments-section').hidden = !data.learners.length;
+            summary.hidden = !data.learners.length;
             document.getElementById('save-button').disabled = !data.learners.length;
             updateSummary();
             status.textContent = data.subjects.length
@@ -268,7 +469,10 @@
         document.getElementById('selection-form').addEventListener('submit', async event => {
             event.preventDefault();
             document.getElementById('save-button').disabled = true;
-            markTable.hidden = true;
+            document.getElementById('attendance-section').hidden = true;
+            document.getElementById('subject-section').hidden = true;
+            document.getElementById('skills-section').hidden = true;
+            document.getElementById('comments-section').hidden = true;
             summary.hidden = true;
             status.textContent = 'Loading mark sheet…';
             try {
@@ -291,17 +495,37 @@
             const button = event.currentTarget;
             button.disabled = true;
             try {
-                const rows = [...markBody.rows].map((row, index) => ({
-                    learnerId: currentSheet.learners[index].id,
-                    marks: [...row.querySelectorAll('.subject-mark')].map((select, subjectIndex) => ({
-                        subjectId: currentSheet.subjects[subjectIndex].id,
-                        mark: select.value ? Number(select.value) : null
-                    })),
-                    skills: Object.fromEntries([...row.querySelectorAll('.skill-mark')].map(select => [
-                        select.dataset.skill.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
-                        select.value ? Number(select.value) : null
-                    ]))
-                }));
+                const rows = currentSheet.learners.map(learner => {
+                    const id = String(learner.id);
+                    const markRow = [...markBody.rows].find(row => row.dataset.learnerId === id);
+                    const attendanceRow = [...attendanceTable.querySelector('tbody').rows]
+                        .find(row => row.dataset.learnerId === id);
+                    const comment = commentsList.querySelector(`textarea[data-learner-id="${id}"]`);
+                    const ratings = Object.fromEntries(
+                        [...skillTables.querySelectorAll(`select[data-learner-id="${id}"]`)].map(select => [
+                            select.dataset.skill,
+                            select.value ? Number(select.value) : null
+                        ])
+                    );
+                    const daysOpen = attendanceRow.querySelector('.days-open').value;
+                    const daysPresent = attendanceRow.querySelector('.days-present').value;
+                    return {
+                        learnerId: learner.id,
+                        marks: [...markRow.querySelectorAll('.subject-mark')].map(select => ({
+                            subjectId: Number(select.dataset.subjectId),
+                            mark: select.value ? Number(select.value) : null
+                        })),
+                        skills: { ratings },
+                        attendance: {
+                            daysSchoolOpen: daysOpen === '' ? null : Number(daysOpen),
+                            daysPresent: daysPresent === '' ? null : Number(daysPresent),
+                            resumptionDate: attendanceRow.querySelector('.resumption-date').value || null
+                        },
+                        comments: {
+                            [comment.dataset.commentType]: comment.value
+                        }
+                    };
+                });
                 const baseUrl = await window.resolvePortalApiBase();
                 const response = await fetch(`${baseUrl}/api/reception/sheet`, {
                     method: 'PUT',
@@ -315,7 +539,7 @@
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || 'Unable to save Reception marks.');
-                status.textContent = `Saved subject marks and skill ratings for ${currentSheet.learners.length} learner(s).`;
+                status.textContent = `Saved marks, individual skill ratings, attendance, and comments for ${currentSheet.learners.length} learner(s).`;
             } catch (error) {
                 status.textContent = error.message || 'Unable to save Reception marks.';
             } finally {

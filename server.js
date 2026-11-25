@@ -744,7 +744,7 @@ async function loadReceptionSheet(req, res) {
         classResult.rows[0].class_teacher !== req.user.username) {
       return res.status(403).json({ error: 'You are not assigned to this Reception class.' });
     }
-    const [subjectsResult, learnersResult, marksResult, skillsResult] = await Promise.all([
+    const [subjectsResult, learnersResult, marksResult, skillsResult, attendanceResult, commentsResult] = await Promise.all([
       pool.query(
         `SELECT DISTINCT s.id, s.name, s.class_name, s.stream
          FROM allocations a
@@ -766,8 +766,20 @@ async function loadReceptionSheet(req, res) {
       ),
       pool.query(
         `SELECT learner_id, literacy_skill, number_skill, writing_skill,
-                creative_skill, behaviour_skill
+                creative_skill, behaviour_skill, ratings
          FROM reception_learner_skills
+         WHERE class_id = $1 AND term = $2 AND session_year = $3`,
+        [classId, term.trim(), sessionYear.trim()]
+      ),
+      pool.query(
+        `SELECT learner_id, days_school_open, days_present, resumption_date
+         FROM learner_attendance
+         WHERE class_id = $1 AND term = $2 AND session_year = $3`,
+        [classId, term.trim(), sessionYear.trim()]
+      ),
+      pool.query(
+        `SELECT learner_id, principal_comment, teacher_comment
+         FROM learner_comments
          WHERE class_id = $1 AND term = $2 AND session_year = $3`,
         [classId, term.trim(), sessionYear.trim()]
       )
@@ -782,7 +794,9 @@ async function loadReceptionSheet(req, res) {
       marks: marksResult.rows.filter(mark =>
         subjects.some(subject => subject.id === mark.subject_id)
       ),
-      skills: skillsResult.rows
+      skills: skillsResult.rows,
+      attendance: attendanceResult.rows,
+      comments: commentsResult.rows
     });
   } catch (err) {
     console.error('Loading the Reception result sheet failed:', err);
@@ -792,6 +806,16 @@ async function loadReceptionSheet(req, res) {
 
 app.get('/api/reception/sheet', requireRole('admin', 'teacher'), loadReceptionSheet);
 app.get('/api/reception/print-sheet', requireRole('admin'), loadReceptionSheet);
+
+const receptionSkillKeys = new Set([
+  'recognitionOfAlphabets', 'readingAbility', 'reciteRhymePoem', 'recognitionOfObjectNames',
+  'recognitionOfNumbers', 'counting', 'numberSequenceQuantitative', 'simpleNumberManipulation',
+  'ableToWrite', 'printingNumbers', 'printingLetters', 'writingNeatness',
+  'printingAndColoring', 'ableToDraw', 'modeling', 'computerDesign',
+  'assignment', 'healthHabit', 'socialHabit', 'nurseryScience', 'computerAppreciation',
+  'punctuality', 'comportment', 'neatness', 'reliability', 'honesty', 'selfControl',
+  'initiative', 'spiritOfCoordination', 'responsibility', 'perseverance'
+]);
 
 app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res) => {
   const classId = Number(req.body.classId);
@@ -806,6 +830,8 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
   }
   const normalizedRows = [];
   const skillRows = [];
+  const attendanceRows = [];
+  const commentRows = [];
   for (const row of rows) {
     const learnerId = Number(row.learnerId);
     if (!Number.isInteger(learnerId) || learnerId <= 0) {
@@ -815,25 +841,96 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
       if (!row.skills || typeof row.skills !== 'object' || Array.isArray(row.skills)) {
         return res.status(400).json({ error: 'Each learner skill assessment must be valid.' });
       }
-      const skills = {
+      const ratings = row.skills.ratings === undefined ? {} : row.skills.ratings;
+      if (!ratings || typeof ratings !== 'object' || Array.isArray(ratings) ||
+          Object.keys(ratings).some(key => !receptionSkillKeys.has(key))) {
+        return res.status(400).json({ error: 'Reception skill ratings must use the listed skill items.' });
+      }
+      if (Object.values(ratings).some(value => value !== null &&
+          !(Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5))) {
+        return res.status(400).json({ error: 'Reception skill scores must be blank or a whole number from 1 to 5.' });
+      }
+      const legacySkills = {
         literacySkill: row.skills.literacySkill,
         numberSkill: row.skills.numberSkill,
         writingSkill: row.skills.writingSkill,
         creativeSkill: row.skills.creativeSkill,
         behaviourSkill: row.skills.behaviourSkill
       };
-      if (Object.values(skills).some(value => value !== null &&
+      const hasLegacySkills = Object.values(legacySkills).some(value => value !== undefined);
+      if (Object.values(legacySkills).some(value => value !== undefined && value !== null &&
           !(Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5))) {
         return res.status(400).json({ error: 'Reception skill scores must be blank or a whole number from 1 to 5.' });
       }
       skillRows.push({
         learnerId,
-        literacySkill: skills.literacySkill === null ? null : Number(skills.literacySkill),
-        numberSkill: skills.numberSkill === null ? null : Number(skills.numberSkill),
-        writingSkill: skills.writingSkill === null ? null : Number(skills.writingSkill),
-        creativeSkill: skills.creativeSkill === null ? null : Number(skills.creativeSkill),
-        behaviourSkill: skills.behaviourSkill === null ? null : Number(skills.behaviourSkill)
+        literacySkill: legacySkills.literacySkill === undefined || legacySkills.literacySkill === null
+          ? null : Number(legacySkills.literacySkill),
+        numberSkill: legacySkills.numberSkill === undefined || legacySkills.numberSkill === null
+          ? null : Number(legacySkills.numberSkill),
+        writingSkill: legacySkills.writingSkill === undefined || legacySkills.writingSkill === null
+          ? null : Number(legacySkills.writingSkill),
+        creativeSkill: legacySkills.creativeSkill === undefined || legacySkills.creativeSkill === null
+          ? null : Number(legacySkills.creativeSkill),
+        behaviourSkill: legacySkills.behaviourSkill === undefined || legacySkills.behaviourSkill === null
+          ? null : Number(legacySkills.behaviourSkill),
+        hasLegacySkills,
+        ratings: Object.fromEntries(Object.entries(ratings).map(([key, value]) => [
+          key, value === null ? null : Number(value)
+        ]))
       });
+    }
+    if (row.attendance !== undefined) {
+      if (!row.attendance || typeof row.attendance !== 'object' || Array.isArray(row.attendance)) {
+        return res.status(400).json({ error: 'Each learner attendance record must be valid.' });
+      }
+      const { daysSchoolOpen, daysPresent, resumptionDate } = row.attendance;
+      const hasDaysOpen = daysSchoolOpen !== undefined && daysSchoolOpen !== null;
+      const hasDaysPresent = daysPresent !== undefined && daysPresent !== null;
+      const hasAnyAttendanceCount = hasDaysOpen || hasDaysPresent;
+      const hasAttendanceCounts = hasDaysOpen && hasDaysPresent;
+      const normalizedResumptionDate = resumptionDate === undefined ? null : resumptionDate;
+      if (hasAnyAttendanceCount && !hasAttendanceCounts) {
+        return res.status(400).json({ error: 'Enter both days school was open and days present.' });
+      }
+      if (hasAttendanceCounts &&
+          (!Number.isInteger(Number(daysSchoolOpen)) || Number(daysSchoolOpen) < 0 ||
+           !Number.isInteger(Number(daysPresent)) || Number(daysPresent) < 0 ||
+           Number(daysPresent) > Number(daysSchoolOpen))) {
+        return res.status(400).json({ error: 'Days present must be a whole number between zero and days school was open.' });
+      }
+      if (normalizedResumptionDate !== null &&
+          (typeof normalizedResumptionDate !== 'string' ||
+           !/^\d{4}-\d{2}-\d{2}$/.test(normalizedResumptionDate) ||
+           Number.isNaN(Date.parse(`${normalizedResumptionDate}T00:00:00Z`)) ||
+           new Date(`${normalizedResumptionDate}T00:00:00Z`).toISOString().slice(0, 10) !== normalizedResumptionDate)) {
+        return res.status(400).json({ error: 'Resumption date must be a valid date.' });
+      }
+      attendanceRows.push({
+        learnerId,
+        daysSchoolOpen: hasAttendanceCounts ? Number(daysSchoolOpen) : null,
+        daysPresent: hasAttendanceCounts ? Number(daysPresent) : null,
+        resumptionDate: normalizedResumptionDate
+      });
+    }
+    if (row.comments !== undefined) {
+      if (!row.comments || typeof row.comments !== 'object' || Array.isArray(row.comments) ||
+          Object.keys(row.comments).some(key => !['principalComment', 'teacherComment'].includes(key)) ||
+          Object.values(row.comments).some(value => typeof value !== 'string' || value.length > 2000)) {
+        return res.status(400).json({ error: 'Each learner comment must be valid and no longer than 2000 characters.' });
+      }
+      const commentKey = req.user.role === 'admin' ? 'principalComment' : 'teacherComment';
+      const otherCommentKey = req.user.role === 'admin' ? 'teacherComment' : 'principalComment';
+      if (Object.prototype.hasOwnProperty.call(row.comments, otherCommentKey)) {
+        return res.status(403).json({ error: 'You cannot save this type of comment.' });
+      }
+      if (Object.prototype.hasOwnProperty.call(row.comments, commentKey)) {
+        commentRows.push({
+          learnerId,
+          comment: row.comments[commentKey].trim(),
+          commentColumn: req.user.role === 'admin' ? 'principal_comment' : 'teacher_comment'
+        });
+      }
     }
     for (const item of row.marks) {
       const subjectId = Number(item && item.subjectId);
@@ -887,7 +984,9 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
       .map(subject => subject.id));
     if (learnerRowIds.some(learnerId => !learnerIds.has(learnerId)) ||
         normalizedRows.some(row => !subjectIds.has(row.subjectId)) ||
-        skillRows.some(row => !learnerIds.has(row.learnerId))) {
+        skillRows.some(row => !learnerIds.has(row.learnerId)) ||
+        attendanceRows.some(row => !learnerIds.has(row.learnerId)) ||
+        commentRows.some(row => !learnerIds.has(row.learnerId))) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Each mark must belong to a learner and subject in this Reception class.' });
     }
@@ -907,20 +1006,68 @@ app.put('/api/reception/sheet', requireRole('admin', 'teacher'), async (req, res
       await client.query(
         `INSERT INTO reception_learner_skills
            (learner_id, class_id, term, session_year, literacy_skill, number_skill,
-            writing_skill, creative_skill, behaviour_skill, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            writing_skill, creative_skill, behaviour_skill, ratings, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (learner_id, class_id, term, session_year)
-         DO UPDATE SET literacy_skill = EXCLUDED.literacy_skill,
-           number_skill = EXCLUDED.number_skill, writing_skill = EXCLUDED.writing_skill,
-           creative_skill = EXCLUDED.creative_skill, behaviour_skill = EXCLUDED.behaviour_skill,
+         DO UPDATE SET literacy_skill = CASE WHEN $12 THEN EXCLUDED.literacy_skill
+               ELSE reception_learner_skills.literacy_skill END,
+           number_skill = CASE WHEN $12 THEN EXCLUDED.number_skill
+               ELSE reception_learner_skills.number_skill END,
+           writing_skill = CASE WHEN $12 THEN EXCLUDED.writing_skill
+               ELSE reception_learner_skills.writing_skill END,
+           creative_skill = CASE WHEN $12 THEN EXCLUDED.creative_skill
+               ELSE reception_learner_skills.creative_skill END,
+           behaviour_skill = CASE WHEN $12 THEN EXCLUDED.behaviour_skill
+               ELSE reception_learner_skills.behaviour_skill END,
+           ratings = EXCLUDED.ratings,
            updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
         [row.learnerId, classId, term.trim(), sessionYear.trim(),
           row.literacySkill, row.numberSkill, row.writingSkill, row.creativeSkill,
-          row.behaviourSkill, req.user.username]
+          row.behaviourSkill, JSON.stringify(row.ratings), req.user.username,
+          row.hasLegacySkills]
+      );
+    }
+    for (const row of attendanceRows) {
+      if (row.daysSchoolOpen === null && !row.resumptionDate) {
+        await client.query(
+          `DELETE FROM learner_attendance
+           WHERE learner_id = $1 AND class_id = $2 AND term = $3 AND session_year = $4`,
+          [row.learnerId, classId, term.trim(), sessionYear.trim()]
+        );
+        continue;
+      }
+      await client.query(
+        `INSERT INTO learner_attendance
+           (learner_id, class_id, term, session_year, days_school_open, days_present, resumption_date, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (learner_id, class_id, term, session_year)
+         DO UPDATE SET days_school_open = EXCLUDED.days_school_open,
+           days_present = EXCLUDED.days_present, resumption_date = EXCLUDED.resumption_date,
+           updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        [row.learnerId, classId, term.trim(), sessionYear.trim(),
+          row.daysSchoolOpen === null ? 0 : row.daysSchoolOpen,
+          row.daysPresent === null ? 0 : row.daysPresent, row.resumptionDate, req.user.username]
+      );
+    }
+    for (const row of commentRows) {
+      await client.query(
+        `INSERT INTO learner_comments
+           (learner_id, class_id, term, session_year, ${row.commentColumn}, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (learner_id, class_id, term, session_year)
+         DO UPDATE SET ${row.commentColumn} = EXCLUDED.${row.commentColumn},
+           updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        [row.learnerId, classId, term.trim(), sessionYear.trim(), row.comment, req.user.username]
       );
     }
     await client.query('COMMIT');
-    res.json({ success: true, saved: normalizedRows.length, skillsSaved: skillRows.length });
+    res.json({
+      success: true,
+      saved: normalizedRows.length,
+      skillsSaved: skillRows.length,
+      attendanceSaved: attendanceRows.length,
+      commentsSaved: commentRows.length
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Saving the Reception result sheet failed:', err);

@@ -186,10 +186,15 @@ async function init() {
         writing_skill SMALLINT CHECK (writing_skill BETWEEN 1 AND 5),
         creative_skill SMALLINT CHECK (creative_skill BETWEEN 1 AND 5),
         behaviour_skill SMALLINT CHECK (behaviour_skill BETWEEN 1 AND 5),
+        ratings JSONB NOT NULL DEFAULT '{}'::jsonb,
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, class_id, term, session_year)
       );
+    `);
+    await client.query(`
+      ALTER TABLE reception_learner_skills
+      ADD COLUMN IF NOT EXISTS ratings JSONB NOT NULL DEFAULT '{}'::jsonb;
     `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS learner_comments (
@@ -241,10 +246,15 @@ async function init() {
         session_year VARCHAR(50) NOT NULL,
         days_school_open INTEGER NOT NULL CHECK (days_school_open >= 0),
         days_present INTEGER NOT NULL CHECK (days_present >= 0 AND days_present <= days_school_open),
+        resumption_date DATE,
         updated_by VARCHAR(255) REFERENCES users(username),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (learner_id, class_id, term, session_year)
       );
+    `);
+    await client.query(`
+      ALTER TABLE learner_attendance
+      ADD COLUMN IF NOT EXISTS resumption_date DATE;
     `);
     console.log('Allocations table created or exists.');
 
