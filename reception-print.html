@@ -34,16 +34,16 @@
         .report-comment { margin:.5rem 0; padding:.65rem; border:1px solid #718096; }
         .report-comment h2 { margin:0 0 .4rem; }
         .report-comment p { margin:0; white-space:pre-wrap; }
-        @page { size: A4 portrait; margin: 10mm; }
+        @page { size: A4 portrait; margin: 8mm; }
         @media print {
             body { padding: 0; background: #fff; }
             main { max-width: none; padding: 0; }
             .toolbar, .filters, #status { display: none !important; }
             .report-card {
-                width: 190mm;
-                min-height: 277mm;
+                width: 194mm;
+                min-height: 281mm;
                 margin: 0;
-                padding: 4mm;
+                padding: 3mm;
                 border: 0;
                 break-inside: avoid-page;
                 page-break-inside: avoid;
@@ -55,8 +55,19 @@
             .school-heading img { width:48px; height:48px; }
             .learner-details { gap:.3rem .75rem; margin:.4rem 0; font-size:8pt; }
             .report-card h2 { margin:.45rem 0 .2rem; font-size:10pt; }
-            table { width:100%; table-layout:fixed; margin:.25rem 0 .45rem; font-size:8pt; line-height:1.15; }
-            th, td { padding:3px 5px; overflow-wrap:anywhere; }
+            table {
+                width: 100%;
+                table-layout: fixed;
+                margin: .3rem 0 .5rem;
+                font-size: 9pt;
+                line-height: 1.2;
+            }
+            thead { display: table-header-group; }
+            th, td {
+                padding: 4px 6px;
+                vertical-align: middle;
+                overflow-wrap: anywhere;
+            }
             tr, .summary div, .report-comment { break-inside:avoid; page-break-inside:avoid; }
             .report-comment { margin:.25rem 0; padding:.35rem; }
             .report-comment h2 { margin:0 0 .2rem; }
@@ -91,7 +102,13 @@
             </label>
             <label for="session">Session
                 <input id="session" type="text" inputmode="numeric" pattern="[0-9]{4}/[0-9]{4}"
-                       placeholder="e.g. 2026/2027" title="Enter the session as YYYY/YYYY" required>
+                       placeholder="e.g. 2026/2027" title="Enter the session as YYYY/YYYY"
+                       list="session-options" required>
+                <datalist id="session-options">
+                    <option value="2025/2026"></option>
+                    <option value="2026/2027"></option>
+                    <option value="2027/2028"></option>
+                </datalist>
             </label>
             <button type="submit" id="show-button">Show Results</button>
         </form>
