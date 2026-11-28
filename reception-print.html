@@ -39,14 +39,25 @@
             body { padding: 0; background: #fff; }
             main { max-width: none; padding: 0; }
             .toolbar, .filters, #status { display: none !important; }
-            .report-card { margin: 0; padding: 3mm; border: 0; break-after: page; page-break-after: always; }
+            .report-card {
+                width: 190mm;
+                min-height: 277mm;
+                margin: 0;
+                padding: 4mm;
+                border: 0;
+                break-inside: avoid-page;
+                page-break-inside: avoid;
+                break-after: page;
+                page-break-after: always;
+            }
             .report-card:last-child { break-after: auto; page-break-after: auto; }
             .school-heading { margin-bottom:.4rem; padding-bottom:.3rem; }
             .school-heading img { width:48px; height:48px; }
             .learner-details { gap:.3rem .75rem; margin:.4rem 0; font-size:8pt; }
             .report-card h2 { margin:.45rem 0 .2rem; font-size:10pt; }
-            table { margin:.25rem 0 .45rem; font-size:7pt; }
-            th, td { padding:2px 4px; }
+            table { width:100%; table-layout:fixed; margin:.25rem 0 .45rem; font-size:8pt; line-height:1.15; }
+            th, td { padding:3px 5px; overflow-wrap:anywhere; }
+            tr, .summary div, .report-comment { break-inside:avoid; page-break-inside:avoid; }
             .report-comment { margin:.25rem 0; padding:.35rem; }
             .report-comment h2 { margin:0 0 .2rem; }
             th { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
